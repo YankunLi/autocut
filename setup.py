@@ -24,9 +24,10 @@ setup(
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     extras_require={
-        "all": ["openai", "faster-whisper"],
+        "all": ["openai", "faster-whisper", "gradio"],
         "openai": ["openai"],
         "faster": ["faster-whisper"],
+        "ui": ["gradio"],
     },
     packages=find_packages(),
     entry_points={

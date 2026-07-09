@@ -58,3 +58,6 @@ class TestArgs:
             "faster" if os.environ.get("WHISPER_MODE") == "faster" else "whisper"
         )
         self.openai_rpm = 3
+        self.normalize = False
+        self.encoding_method = "stream_copy"
+        self.merge_gap = 0.5

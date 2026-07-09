@@ -1,0 +1,136 @@
+import logging
+import os
+
+from .schema import (
+    CutProject,
+    load_project,
+    project_to_segments,
+    save_project,
+    srt_to_project,
+    md_to_project,
+)
+
+
+def create_ui():
+    try:
+        import gradio as gr
+    except ImportError:
+        raise ImportError(
+            "Gradio is required for the web UI. Install it with: pip install autocut-sub[ui]"
+        )
+
+    from .ffmpeg_cut import cut_segments_stream_copy
+    from . import utils
+
+    def load_file(media_path, srt_file, json_file):
+        if json_file is not None:
+            project = load_project(json_file)
+        elif srt_file is not None:
+            project = srt_to_project(srt_file, media_path)
+        else:
+            return None, "Please provide an SRT or JSON file"
+
+        rows = []
+        for seg in project["segments"]:
+            rows.append([
+                seg["index"],
+                round(seg["start"], 3),
+                round(seg["end"], 3),
+                seg["text"],
+                seg["keep"],
+                seg["transition"],
+                seg["transition_duration"],
+            ])
+        return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path)}"
+
+    def save_project_json(segments_data, media_path):
+        if not segments_data:
+            return "No segments to save"
+        project: CutProject = {
+            "version": "1.0",
+            "source": media_path,
+            "segments": [],
+        }
+        for row in segments_data:
+            project["segments"].append({
+                "index": int(row[0]),
+                "start": float(row[1]),
+                "end": float(row[2]),
+                "text": str(row[3]),
+                "keep": bool(row[4]),
+                "transition": str(row[5]),
+                "transition_duration": float(row[6]),
+            })
+        json_path = os.path.splitext(media_path)[0] + ".json"
+        save_project(project, json_path)
+        return f"Project saved to {json_path}"
+
+    def run_cut(segments_data, media_path):
+        if not segments_data:
+            return "No segments to cut"
+        project: CutProject = {
+            "version": "1.0",
+            "source": media_path,
+            "segments": [],
+        }
+        for row in segments_data:
+            project["segments"].append({
+                "index": int(row[0]),
+                "start": float(row[1]),
+                "end": float(row[2]),
+                "text": str(row[3]),
+                "keep": bool(row[4]),
+                "transition": str(row[5]),
+                "transition_duration": float(row[6]),
+            })
+
+        segments = project_to_segments(project)
+        if not segments:
+            return "No segments marked as keep"
+
+        is_video_file = utils.is_video(media_path.lower())
+        outext = "mp4" if is_video_file else "mp3"
+        output_fn = utils.change_ext(utils.add_cut(media_path), outext)
+
+        cut_segments_stream_copy(media_path, output_fn, segments)
+        return f"Cut saved to {output_fn} ({len(segments)} segments)"
+
+    with gr.Blocks(title="AutoCut Editor") as app:
+        gr.Markdown("# AutoCut - Segment Editor")
+
+        with gr.Row():
+            media_input = gr.Textbox(label="Media file path", placeholder="/path/to/video.mp4")
+            srt_input = gr.File(label="SRT file", file_types=[".srt"])
+            json_input = gr.File(label="Project JSON", file_types=[".json"])
+            load_btn = gr.Button("Load", variant="primary")
+
+        segments_df = gr.Dataframe(
+            headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
+            datatype=["number", "number", "number", "str", "bool", "str", "number"],
+            interactive=True,
+            label="Segments (edit Keep/Transition columns, then cut)",
+        )
+
+        status = gr.Textbox(label="Status")
+
+        with gr.Row():
+            save_btn = gr.Button("Save Project JSON")
+            cut_btn = gr.Button("Run Cut (stream copy)", variant="primary")
+
+        load_btn.click(
+            fn=load_file,
+            inputs=[media_input, srt_input, json_input],
+            outputs=[segments_df, status],
+        )
+        save_btn.click(
+            fn=save_project_json,
+            inputs=[segments_df, media_input],
+            outputs=[status],
+        )
+        cut_btn.click(
+            fn=run_cut,
+            inputs=[segments_df, media_input],
+            outputs=[status],
+        )
+
+    return app

@@ -161,8 +161,26 @@ def main():
         choices=["cpu", "cuda"],
         help="Force to CPU or GPU for transcribing. In default automatically use GPU if available.",
     )
+    parser.add_argument(
+        "--normalize",
+        help="Normalize audio levels (requires full re-encode, slower)",
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
+        "--merge-gap",
+        type=float,
+        default=0.5,
+        help="Merge subtitle segments closer than this many seconds (default: 0.5)",
+    )
+    parser.add_argument(
+        "--ui",
+        help="Launch the Gradio web UI for segment editing",
+        action=argparse.BooleanOptionalAction,
+    )
 
     args = parser.parse_args()
+
+    args.encoding_method = "reencode" if args.normalize else "stream_copy"
 
     if args.transcribe:
         from .transcribe import Transcribe
@@ -193,6 +211,11 @@ def main():
         Daemon(args).run()
     elif args.s:
         utils.compact_rst(args.inputs[0], args.encoding)
+    elif args.ui:
+        from .ui import create_ui
+
+        app = create_ui()
+        app.launch()
     else:
         logging.warning("No action, use -c, -t or -d")
 

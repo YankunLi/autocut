@@ -3,9 +3,9 @@ import os
 import re
 
 import srt
-from moviepy import editor
 
 from . import utils
+from .schema import CutProject, load_project, md_to_project, project_to_segments, srt_to_project, save_project
 
 
 # Merge videos
@@ -57,16 +57,26 @@ class Merger:
                 continue
             fn = os.path.join(os.path.dirname(md_fn), m[0])
             logging.info(f"Loading {fn}")
-            videos.append(editor.VideoFileClip(fn))
+            videos.append(fn)
 
-        dur = sum([v.duration for v in videos])
-        logging.info(f"Merging into a video with {dur / 60:.1f} min length")
+        logging.info(f"Merging {len(videos)} videos")
 
-        merged = editor.concatenate_videoclips(videos)
         fn = os.path.splitext(md_fn)[0] + "_merged.mp4"
-        merged.write_videofile(
-            fn, audio_codec="aac", bitrate=self.args.bitrate
-        )  # logger=None,
+        encoding_method = getattr(self.args, "encoding_method", "stream_copy")
+
+        if encoding_method == "stream_copy":
+            from .ffmpeg_cut import merge_videos_stream_copy
+            merge_videos_stream_copy(videos, fn)
+        else:
+            from moviepy import editor
+            clips = [editor.VideoFileClip(v) for v in videos]
+            merged = editor.concatenate_videoclips(clips)
+            merged.write_videofile(
+                fn, audio_codec="aac", bitrate=self.args.bitrate
+            )
+            for c in clips:
+                c.close()
+
         logging.info(f"Saved merged video to {fn}")
 
 
@@ -76,13 +86,13 @@ class Cutter:
         self.args = args
 
     def run(self):
-        fns = {"srt": None, "media": None, "md": None}
+        fns = {"srt": None, "media": None, "md": None, "json": None}
         for fn in self.args.inputs:
             ext = os.path.splitext(fn)[1][1:]
             fns[ext if ext in fns else "media"] = fn
 
         assert fns["media"], "must provide a media filename"
-        assert fns["srt"], "must provide a srt filename"
+        assert fns["srt"] or fns["json"], "must provide a srt or json filename"
 
         is_video_file = utils.is_video(fns["media"].lower())
         outext = "mp4" if is_video_file else "mp3"
@@ -90,78 +100,66 @@ class Cutter:
         if utils.check_exists(output_fn, self.args.force):
             return
 
-        with open(fns["srt"], encoding=self.args.encoding) as f:
-            subs = list(srt.parse(f.read()))
+        merge_gap = getattr(self.args, "merge_gap", 0.5)
+        encoding_method = getattr(self.args, "encoding_method", "stream_copy")
 
-        if fns["md"]:
-            md = utils.MD(fns["md"], self.args.encoding)
-            if not md.done_editing():
-                return
-            index = []
-            for mark, sent in md.tasks():
-                if not mark:
-                    continue
-                m = re.match(r"\[(\d+)", sent.strip())
-                if m:
-                    index.append(int(m.groups()[0]))
-            subs = [s for s in subs if s.index in index]
+        if fns["json"]:
+            project = load_project(fns["json"])
+            logging.info(f'Cut {fns["media"]} based on {fns["json"]}')
+        elif fns["md"]:
+            project = md_to_project(
+                fns["md"], fns["srt"], fns["media"], self.args.encoding
+            )
             logging.info(f'Cut {fns["media"]} based on {fns["srt"]} and {fns["md"]}')
         else:
+            project = srt_to_project(fns["srt"], fns["media"], self.args.encoding)
             logging.info(f'Cut {fns["media"]} based on {fns["srt"]}')
 
-        segments = []
-        # Avoid disordered subtitles
-        subs.sort(key=lambda x: x.start)
-        for x in subs:
-            if len(segments) == 0:
-                segments.append(
-                    {"start": x.start.total_seconds(), "end": x.end.total_seconds()}
+        segments = project_to_segments(project, merge_gap)
+        if not segments:
+            logging.warning("No segments to cut")
+            return
+
+        if encoding_method == "stream_copy":
+            from .ffmpeg_cut import cut_segments_stream_copy
+
+            cut_segments_stream_copy(fns["media"], output_fn, segments)
+        else:
+            from moviepy import editor
+
+            if is_video_file:
+                media = editor.VideoFileClip(fns["media"])
+            else:
+                media = editor.AudioFileClip(fns["media"])
+
+            clips = [media.subclip(s["start"], s["end"]) for s in segments]
+            if is_video_file:
+                final_clip = editor.concatenate_videoclips(clips)
+                logging.info(
+                    f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
+                )
+
+                aud = final_clip.audio.set_fps(44100)
+                final_clip = final_clip.without_audio().set_audio(aud)
+                final_clip = final_clip.fx(editor.afx.audio_normalize)
+
+                final_clip.write_videofile(
+                    output_fn, audio_codec="aac", bitrate=self.args.bitrate
                 )
             else:
-                if x.start.total_seconds() - segments[-1]["end"] < 0.5:
-                    segments[-1]["end"] = x.end.total_seconds()
-                else:
-                    segments.append(
-                        {"start": x.start.total_seconds(), "end": x.end.total_seconds()}
-                    )
+                final_clip = editor.concatenate_audioclips(clips)
+                logging.info(
+                    f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
+                )
 
-        if is_video_file:
-            media = editor.VideoFileClip(fns["media"])
-        else:
-            media = editor.AudioFileClip(fns["media"])
+                final_clip = final_clip.fx(editor.afx.audio_normalize)
+                final_clip.write_audiofile(
+                    output_fn, codec="libmp3lame", fps=44100, bitrate=self.args.bitrate
+                )
 
-        # Add a fade between two clips. Not quite necessary. keep code here for reference
-        # fade = 0
-        # segments = _expand_segments(segments, fade, 0, video.duration)
-        # clips = [video.subclip(
-        #         s['start'], s['end']).crossfadein(fade) for s in segments]
-        # final_clip = editor.concatenate_videoclips(clips, padding = -fade)
+            media.close()
 
-        clips = [media.subclip(s["start"], s["end"]) for s in segments]
-        if is_video_file:
-            final_clip: editor.VideoClip = editor.concatenate_videoclips(clips)
-            logging.info(
-                f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
-            )
+        project_json_path = utils.change_ext(output_fn, "json")
+        save_project(project, project_json_path)
 
-            aud = final_clip.audio.set_fps(44100)
-            final_clip = final_clip.without_audio().set_audio(aud)
-            final_clip = final_clip.fx(editor.afx.audio_normalize)
-
-            # an alternative to birate is use crf, e.g. ffmpeg_params=['-crf', '18']
-            final_clip.write_videofile(
-                output_fn, audio_codec="aac", bitrate=self.args.bitrate
-            )
-        else:
-            final_clip: editor.AudioClip = editor.concatenate_audioclips(clips)
-            logging.info(
-                f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
-            )
-
-            final_clip = final_clip.fx(editor.afx.audio_normalize)
-            final_clip.write_audiofile(
-                output_fn, codec="libmp3lame", fps=44100, bitrate=self.args.bitrate
-            )
-
-        media.close()
         logging.info(f"Saved media to {output_fn}")
