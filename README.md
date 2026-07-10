@@ -2,6 +2,28 @@
 
 AutoCut 对你的视频自动生成字幕。然后你选择需要保留的句子，AutoCut 将对你视频中对应的片段裁切并保存。你无需使用视频编辑软件，只需要编辑文本文件即可完成剪切。
 
+**2025.07更新**：轻量改进路线优化
+
+- 默认使用 ffmpeg stream copy（`-c copy`）进行无损快速剪切，速度提升 10 倍以上，且不损失画质
+- 新增 JSON 中间格式，支持精细时间调整和转场参数
+- 新增 Gradio Web UI，可视化编辑片段
+- 使用 `--normalize` 回退到传统重编码模式（带音频归一化）
+
+```shell
+# 无损快速剪切（默认）
+autocut -c video.mp4 video.srt video.md
+
+# 使用 JSON 项目文件剪切
+autocut -c video.mp4 video_cut.json
+
+# 传统重编码（带音频归一化）
+autocut -c --normalize video.mp4 video.srt video.md
+
+# 启动 Web UI 编辑
+pip install autocut-sub[ui]
+autocut --ui
+```
+
 **2024.10.05更新**：支持 `large-v3-turbo` [模型](https://github.com/openai/whisper/discussions/2363)，提供更快的转录速度。
 
 ```shell
@@ -32,8 +54,11 @@ pip install '.[faster]'
 # for whisper and openai-whisper
 pip install '.[openai]'
 
-# for all
+# for all (including gradio web ui)
 pip install '.[all]'
+
+# for web ui only
+pip install '.[ui]'
 ```
 
 ```shell
@@ -168,15 +193,37 @@ autocut -t 22-52-00.mp4
 autocut -c 22-52-00.mp4 22-52-00.srt 22-52-00.md
 ```
 
-1. 默认视频比特率是 `--bitrate 10m`，你可以根据需要调大调小。
-2. 如果不习惯 Markdown 格式文件，你也可以直接在 `srt` 文件里删除不要的句子，在剪切时不传入 `md` 文件名即可。就是 `autocut -c 22-52-00.mp4 22-52-00.srt`
-3. 如果仅有 `srt` 文件，编辑不方便可以使用如下命令生成 `md` 文件，然后编辑 `md` 文件即可，但此时会完全对照 `srt` 生成，不会出现 `no speech` 等提示文本。
+1. 默认使用 ffmpeg stream copy 无损剪切，速度极快且不损失画质。如需音频归一化，使用 `--normalize` 回退到重编码模式。
+2. 默认视频比特率是 `--bitrate 10m`，你可以在重编码模式下根据需要调大调小（stream copy 模式下此参数无效）。
+3. 如果不习惯 Markdown 格式文件，你也可以直接在 `srt` 文件里删除不要的句子，在剪切时不传入 `md` 文件名即可。就是 `autocut -c 22-52-00.mp4 22-52-00.srt`
+4. 如果仅有 `srt` 文件，编辑不方便可以使用如下命令生成 `md` 文件，然后编辑 `md` 文件即可，但此时会完全对照 `srt` 生成，不会出现 `no speech` 等提示文本。
 
    ```bash
    autocut -m test.srt test.mp4
    autocut -m test.mp4 test.srt # 支持视频和字幕乱序传入
    autocut -m test.srt # 也可以只传入字幕文件
    ```
+
+5. 剪切完成后会自动生成 JSON 项目文件（如 `22-52-00_cut.json`），下次可直接使用 JSON 文件剪切，无需重新解析 SRT/MD：
+
+   ```bash
+   autocut -c 22-52-00.mp4 22-52-00_cut.json
+   ```
+
+6. 可通过 `--merge-gap` 调整合并间隔阈值（默认 0.5 秒）：
+
+   ```bash
+   autocut -c --merge-gap 1.0 22-52-00.mp4 22-52-00.srt 22-52-00.md
+   ```
+
+### 使用 Web UI 编辑
+
+```bash
+pip install autocut-sub[ui]
+autocut --ui
+```
+
+在浏览器中可视化加载 SRT/JSON、勾选保留片段、调整时间和转场，然后直接执行剪切。
 
 
 ### 一些小提示
@@ -239,11 +286,16 @@ autocut
 │  setup.py
 │
 └─autocut # 核心代码位于 autocut 文件夹中，新增功能的实现也一般在这里面进行修改或新增
-   │  cut.py
-   │  daemon.py
-   │  main.py
-   │  transcribe.py
-   │  utils.py
+   │  cut.py         # 视频剪切和合并，支持 stream copy 和 reencode 两种模式
+   │  ffmpeg_cut.py  # ffmpeg stream copy 引擎，无损快速剪切
+   │  schema.py      # JSON 中间格式定义和转换函数
+   │  ui.py          # Gradio Web UI，可视化编辑片段
+   │  daemon.py      # 监听文件夹，自动生成字幕和剪切视频
+   │  main.py        # 命令行参数声明和功能调度
+   │  transcribe.py  # 调用模型生成 srt 和 md
+   │  whisper_model.py # Whisper 模型抽象层（本地/faster-whisper/OpenAI API）
+   │  utils.py       # 全局共用工具方法
+   │  type.py        # 类型定义
    └─ __init__.py
 
 ```
@@ -264,9 +316,13 @@ autocut
 1. 代码风格目前遵循 PEP-8，可以使用相关的自动格式化软件完成。
 2. `utils.py` 主要是全局共用的一些工具方法。
 3. `transcribe.py` 是调用模型生成`srt`和`md`的部分。
-4. `cut.py` 提供根据标记后`md`或`srt`进行视频剪切合并的功能。
-5. `daemon.py` 提供的是监听文件夹生成字幕和剪切视频的功能。
-6. `main.py` 声明命令行参数，根据输入参数调用对应功能。
+4. `whisper_model.py` 是 Whisper 模型抽象层，支持本地 whisper、faster-whisper 和 OpenAI API 三种模式。
+5. `cut.py` 提供根据标记后`md`或`srt`或`json`进行视频剪切合并的功能。默认使用 ffmpeg stream copy（无损快速），`--normalize` 时回退到 moviepy 重编码。
+6. `ffmpeg_cut.py` 是 ffmpeg stream copy 引擎，负责无损剪切和合并。
+7. `schema.py` 定义 JSON 中间格式（CutProject/Segment），提供 SRT/MD 与 JSON 之间的转换函数。
+8. `ui.py` 提供 Gradio Web UI，可视化编辑片段、执行剪切。
+9. `daemon.py` 提供的是监听文件夹生成字幕和剪切视频的功能。
+10. `main.py` 声明命令行参数，根据输入参数调用对应功能。
 
 开发过程中请尽量保证修改在正确的地方，以及合理地复用代码，
 同时工具函数请尽可能放在`utils.py`中。
