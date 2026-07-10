@@ -47,7 +47,7 @@ def create_ui():
         return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path)}"
 
     def save_project_json(segments_data, media_path):
-        if not segments_data:
+        if segments_data is None or (hasattr(segments_data, 'empty') and segments_data.empty):
             return "No segments to save"
         project: CutProject = {
             "version": "1.0",
@@ -69,7 +69,7 @@ def create_ui():
         return f"Project saved to {json_path}"
 
     def run_cut(segments_data, media_path, precise):
-        if not segments_data:
+        if segments_data is None or (hasattr(segments_data, 'empty') and segments_data.empty):
             return "No segments to cut"
         project: CutProject = {
             "version": "1.0",
