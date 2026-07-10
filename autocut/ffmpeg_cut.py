@@ -6,7 +6,10 @@ import tempfile
 
 def _run_ffmpeg(cmd: list[str]) -> str:
     logging.info(f"ffmpeg cmd: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        raise RuntimeError(f"ffmpeg not found. Please install ffmpeg and add it to PATH.")
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed (code {result.returncode}): {result.stderr}")
     return result.stdout
@@ -17,18 +20,22 @@ def _to_concat_path(path: str) -> str:
 
 
 def _get_keyframes(input_path: str) -> list[float]:
-    result = subprocess.run(
-        [
-            "ffprobe", "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "packet=pts_time",
-            "-of", "csv=p=0",
-            "-flags2", "+showall",
-            input_path,
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "packet=pts_time",
+                "-of", "csv=p=0",
+                "-flags2", "+showall",
+                input_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        logging.warning("ffprobe not found, cannot detect keyframes")
+        return []
     if result.returncode != 0:
         return []
     keyframes = []
