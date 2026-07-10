@@ -110,6 +110,10 @@ class Cutter:
             project = md_to_project(
                 fns["md"], fns["srt"], fns["media"], self.args.encoding
             )
+            md = utils.MD(fns["md"], self.args.encoding)
+            if not md.done_editing():
+                logging.warning("Editing not marked as done, skipping")
+                return
             logging.info(f'Cut {fns["media"]} based on {fns["srt"]} and {fns["md"]}')
         else:
             project = srt_to_project(fns["srt"], fns["media"], self.args.encoding)
