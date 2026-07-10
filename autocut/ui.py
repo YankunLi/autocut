@@ -22,11 +22,14 @@ def create_ui():
     from .ffmpeg_cut import cut_segments_stream_copy
     from . import utils
 
-    def load_file(media_path, srt_file, json_file):
+    def load_file(media_path, srt_file, json_file, md_file):
         if json_file is not None:
             project = load_project(json_file)
         elif srt_file is not None:
-            project = srt_to_project(srt_file, media_path)
+            if md_file is not None:
+                project = md_to_project(md_file, srt_file, media_path)
+            else:
+                project = srt_to_project(srt_file, media_path)
         else:
             return None, "Please provide an SRT or JSON file"
 
@@ -101,6 +104,7 @@ def create_ui():
         with gr.Row():
             media_input = gr.Textbox(label="Media file path", placeholder="/path/to/video.mp4")
             srt_input = gr.File(label="SRT file", file_types=[".srt"])
+            md_input = gr.File(label="MD file", file_types=[".md"])
             json_input = gr.File(label="Project JSON", file_types=[".json"])
             load_btn = gr.Button("Load", variant="primary")
 
@@ -121,7 +125,7 @@ def create_ui():
 
         load_btn.click(
             fn=load_file,
-            inputs=[media_input, srt_input, json_input],
+            inputs=[media_input, srt_input, json_input, md_input],
             outputs=[segments_df, status],
         )
         save_btn.click(

@@ -25,9 +25,9 @@ def _get_keyframes(input_path: str) -> list[float]:
             [
                 "ffprobe", "-v", "error",
                 "-select_streams", "v:0",
-                "-show_entries", "packet=pts_time",
+                "-show_entries", "frame=pts_time",
                 "-of", "csv=p=0",
-                "-flags2", "+showall",
+                "-skip_frame", "nokey",
                 input_path,
             ],
             capture_output=True,
@@ -120,6 +120,7 @@ def _cut_segments_precise(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
+        has_reencoded = False
         for i, seg in enumerate(segments):
             duration = seg["end"] - seg["start"]
             if duration <= 0:
@@ -147,6 +148,7 @@ def _cut_segments_precise(
                 continue
 
             # Need re-encode for frame-accurate boundaries
+            has_reencoded = True
             seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
             cmd = [
                 "ffmpeg", "-y",
@@ -165,6 +167,8 @@ def _cut_segments_precise(
         if not seg_files:
             raise ValueError("All segments had non-positive duration")
 
+        if has_reencoded:
+            return _concat_segments_reencode(seg_files, output_path)
         return _concat_segments(seg_files, output_path)
 
 
@@ -186,6 +190,28 @@ def _concat_segments(seg_files: list[str], output_path: str) -> str:
         _run_ffmpeg(cmd)
 
     logging.info(f"Stream copy cut saved to {output_path}")
+    return output_path
+
+
+def _concat_segments_reencode(seg_files: list[str], output_path: str) -> str:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        concat_list = os.path.join(tmpdir, "concat.txt")
+        with open(concat_list, "w", encoding="utf-8") as f:
+            for sf in seg_files:
+                f.write(f"file '{_to_concat_path(sf)}'\n")
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concat_list,
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            output_path,
+        ]
+        _run_ffmpeg(cmd)
+
+    logging.info(f"Precise cut saved to {output_path}")
     return output_path
 
 

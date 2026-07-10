@@ -2,8 +2,6 @@ import logging
 import os
 import re
 
-import srt
-
 from . import utils
 from .schema import CutProject, load_project, md_to_project, project_to_segments, srt_to_project, save_project
 
