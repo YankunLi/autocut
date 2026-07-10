@@ -1,8 +1,7 @@
 import json
-import logging
 import os
 import re
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 import srt
 
@@ -23,9 +22,6 @@ class CutProject(TypedDict):
     version: str
     source: str
     segments: list[Segment]
-
-
-TRANSITION_TYPES = Literal["cut", "fade", "crossfade"]
 
 
 def srt_to_project(

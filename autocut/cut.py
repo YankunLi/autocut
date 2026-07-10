@@ -3,7 +3,7 @@ import os
 import re
 
 from . import utils
-from .schema import CutProject, load_project, md_to_project, project_to_segments, srt_to_project, save_project
+from .schema import load_project, md_to_project, project_to_segments, srt_to_project, save_project
 
 
 # Merge videos
@@ -105,13 +105,13 @@ class Cutter:
             project = load_project(fns["json"])
             logging.info(f'Cut {fns["media"]} based on {fns["json"]}')
         elif fns["md"]:
-            project = md_to_project(
-                fns["md"], fns["srt"], fns["media"], self.args.encoding
-            )
             md = utils.MD(fns["md"], self.args.encoding)
             if not md.done_editing():
                 logging.warning("Editing not marked as done, skipping")
                 return
+            project = md_to_project(
+                fns["md"], fns["srt"], fns["media"], self.args.encoding
+            )
             logging.info(f'Cut {fns["media"]} based on {fns["srt"]} and {fns["md"]}')
         else:
             project = srt_to_project(fns["srt"], fns["media"], self.args.encoding)
