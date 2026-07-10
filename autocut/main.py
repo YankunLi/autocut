@@ -17,7 +17,7 @@ def main():
     )
     logging.getLogger().setLevel(logging.INFO)
 
-    parser.add_argument("inputs", type=str, nargs="+", help="Inputs filenames/folders")
+    parser.add_argument("inputs", type=str, nargs="*", help="Inputs filenames/folders")
     parser.add_argument(
         "-t",
         "--transcribe",
