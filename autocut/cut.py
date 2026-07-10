@@ -127,7 +127,8 @@ class Cutter:
         if encoding_method == "stream_copy":
             from .ffmpeg_cut import cut_segments_stream_copy
 
-            cut_segments_stream_copy(fns["media"], output_fn, segments)
+            precise = getattr(self.args, "precise", False)
+            cut_segments_stream_copy(fns["media"], output_fn, segments, precise=precise)
         else:
             from moviepy import editor
 

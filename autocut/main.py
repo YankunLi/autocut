@@ -167,6 +167,11 @@ def main():
         action=argparse.BooleanOptionalAction,
     )
     parser.add_argument(
+        "--precise",
+        help="Frame-accurate cutting (slower, re-encodes at cut points that don't align with keyframes)",
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
         "--merge-gap",
         type=float,
         default=0.5,

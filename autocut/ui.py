@@ -65,7 +65,7 @@ def create_ui():
         save_project(project, json_path)
         return f"Project saved to {json_path}"
 
-    def run_cut(segments_data, media_path):
+    def run_cut(segments_data, media_path, precise):
         if not segments_data:
             return "No segments to cut"
         project: CutProject = {
@@ -92,7 +92,7 @@ def create_ui():
         outext = "mp4" if is_video_file else "mp3"
         output_fn = utils.change_ext(utils.add_cut(media_path), outext)
 
-        cut_segments_stream_copy(media_path, output_fn, segments)
+        cut_segments_stream_copy(media_path, output_fn, segments, precise=precise)
         return f"Cut saved to {output_fn} ({len(segments)} segments)"
 
     with gr.Blocks(title="AutoCut Editor") as app:
@@ -111,11 +111,13 @@ def create_ui():
             label="Segments (edit Keep/Transition columns, then cut)",
         )
 
-        status = gr.Textbox(label="Status")
-
         with gr.Row():
             save_btn = gr.Button("Save Project JSON")
             cut_btn = gr.Button("Run Cut (stream copy)", variant="primary")
+
+        precise_chk = gr.Checkbox(label="Precise (frame-accurate, slower)", value=False)
+
+        status = gr.Textbox(label="Status")
 
         load_btn.click(
             fn=load_file,
@@ -129,7 +131,7 @@ def create_ui():
         )
         cut_btn.click(
             fn=run_cut,
-            inputs=[segments_df, media_input],
+            inputs=[segments_df, media_input, precise_chk],
             outputs=[status],
         )
 

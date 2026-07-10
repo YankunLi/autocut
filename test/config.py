@@ -59,5 +59,6 @@ class TestArgs:
         )
         self.openai_rpm = 3
         self.normalize = False
+        self.precise = False
         self.encoding_method = "stream_copy"
         self.merge_gap = 0.5

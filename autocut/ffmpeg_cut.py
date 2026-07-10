@@ -16,15 +16,63 @@ def _to_concat_path(path: str) -> str:
     return path.replace("\\", "/")
 
 
+def _get_keyframes(input_path: str) -> list[float]:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "packet=pts_time",
+            "-of", "csv=p=0",
+            "-flags2", "+showall",
+            input_path,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    keyframes = []
+    for line in result.stdout.strip().split("\n"):
+        line = line.strip()
+        if line:
+            try:
+                keyframes.append(float(line))
+            except ValueError:
+                pass
+    return keyframes
+
+
+def _find_nearest_keyframe_before(keyframes: list[float], time: float) -> float:
+    best = 0.0
+    for kf in keyframes:
+        if kf <= time:
+            best = kf
+        else:
+            break
+    return best
+
+
+def _find_nearest_keyframe_after(keyframes: list[float], time: float) -> float:
+    for kf in keyframes:
+        if kf >= time:
+            return kf
+    return keyframes[-1] if keyframes else time
+
+
 def cut_segments_stream_copy(
     input_path: str,
     output_path: str,
     segments: list[dict[str, float]],
+    precise: bool = False,
 ) -> str:
     if not segments:
         raise ValueError("No segments to cut")
 
     ext = os.path.splitext(output_path)[1]
+
+    if precise:
+        return _cut_segments_precise(input_path, output_path, segments, ext)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
         for i, seg in enumerate(segments):
@@ -49,6 +97,72 @@ def cut_segments_stream_copy(
         if not seg_files:
             raise ValueError("All segments had non-positive duration")
 
+        return _concat_segments(seg_files, output_path)
+
+
+def _cut_segments_precise(
+    input_path: str,
+    output_path: str,
+    segments: list[dict[str, float]],
+    ext: str,
+) -> str:
+    keyframes = _get_keyframes(input_path)
+    if not keyframes:
+        logging.warning("Could not detect keyframes, falling back to stream copy")
+        return cut_segments_stream_copy(input_path, output_path, segments, precise=False)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        seg_files = []
+        for i, seg in enumerate(segments):
+            duration = seg["end"] - seg["start"]
+            if duration <= 0:
+                logging.warning(f"Skipping segment {i}: non-positive duration {duration}")
+                continue
+
+            kf_before_start = _find_nearest_keyframe_before(keyframes, seg["start"])
+            kf_after_end = _find_nearest_keyframe_after(keyframes, seg["end"])
+
+            # If cut points already align with keyframes, use stream copy
+            if abs(seg["start"] - kf_before_start) < 0.01 and abs(seg["end"] - kf_after_end) < 0.01:
+                seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(seg["start"]),
+                    "-i", input_path,
+                    "-t", str(duration),
+                    "-c", "copy",
+                    "-copyts",
+                    "-avoid_negative_ts", "make_zero",
+                    seg_path,
+                ]
+                _run_ffmpeg(cmd)
+                seg_files.append(seg_path)
+                continue
+
+            # Need re-encode for frame-accurate boundaries
+            seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", str(kf_before_start),
+                "-i", input_path,
+                "-t", str(seg["end"] - kf_before_start),
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-ss", str(seg["start"] - kf_before_start),
+                "-avoid_negative_ts", "make_zero",
+                seg_path,
+            ]
+            _run_ffmpeg(cmd)
+            seg_files.append(seg_path)
+
+        if not seg_files:
+            raise ValueError("All segments had non-positive duration")
+
+        return _concat_segments(seg_files, output_path)
+
+
+def _concat_segments(seg_files: list[str], output_path: str) -> str:
+    with tempfile.TemporaryDirectory() as tmpdir:
         concat_list = os.path.join(tmpdir, "concat.txt")
         with open(concat_list, "w", encoding="utf-8") as f:
             for sf in seg_files:
