@@ -135,9 +135,20 @@ def expand_segments(segments, expand_head, expand_tail, total_length):
     return results
 
 
-def remove_short_segments(segments, threshold):
-    # Remove segments whose length < threshold
-    return [s for s in segments if s["end"] - s["start"] > threshold]
+def remove_short_segments(segments, threshold, total_length):
+    # Remove segments whose length < threshold, but always keep segments at the
+    # very start of audio to avoid losing opening words.
+    if not segments:
+        return segments
+    results = []
+    for i, s in enumerate(segments):
+        if s["end"] - s["start"] > threshold:
+            results.append(s)
+        elif i == 0 and s["start"] < threshold:
+            # First segment that starts near the beginning — keep it even if
+            # short, because dropping it means losing opening words entirely.
+            results.append({"start": 0, "end": s["end"]})
+    return results
 
 
 def merge_adjacent_segments(segments, threshold):

@@ -73,11 +73,11 @@ class Transcribe:
         )
 
         # Remove too short segments
-        speeches = utils.remove_short_segments(speeches, 1.0 * self.sampling_rate)
+        speeches = utils.remove_short_segments(speeches, 1.0 * self.sampling_rate, audio.shape[0])
 
         # Expand to avoid to tight cut. You can tune the pad length
         speeches = utils.expand_segments(
-            speeches, 0.2 * self.sampling_rate, 0.0 * self.sampling_rate, audio.shape[0]
+            speeches, 0.5 * self.sampling_rate, 0.0 * self.sampling_rate, audio.shape[0]
         )
 
         # Merge very closed segments
