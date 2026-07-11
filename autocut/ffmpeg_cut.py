@@ -94,7 +94,6 @@ def cut_segments_stream_copy(
                 "-i", input_path,
                 "-t", str(duration),
                 "-c", "copy",
-                "-copyts",
                 "-avoid_negative_ts", "make_zero",
                 seg_path,
             ]
@@ -139,7 +138,6 @@ def _cut_segments_precise(
                     "-i", input_path,
                     "-t", str(duration),
                     "-c", "copy",
-                    "-copyts",
                     "-avoid_negative_ts", "make_zero",
                     seg_path,
                 ]
