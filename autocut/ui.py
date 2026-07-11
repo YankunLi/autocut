@@ -46,46 +46,57 @@ def create_ui():
             ])
         return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path)}"
 
+    def _parse_segments(segments_data):
+        """Parse segments from Gradio Dataframe, handling both list and DataFrame inputs."""
+        if segments_data is None:
+            return None
+        if hasattr(segments_data, 'empty') and segments_data.empty:
+            return None
+        if hasattr(segments_data, 'values'):
+            rows = segments_data.values.tolist()
+        elif isinstance(segments_data, list):
+            rows = segments_data
+        else:
+            return None
+
+        result = []
+        for row in rows:
+            try:
+                result.append({
+                    "index": int(float(row[0])),
+                    "start": float(row[1]),
+                    "end": float(row[2]),
+                    "text": str(row[3]),
+                    "keep": bool(row[4]),
+                    "transition": str(row[5]),
+                    "transition_duration": float(row[6]),
+                })
+            except (ValueError, TypeError, IndexError):
+                continue
+        return result
+
     def save_project_json(segments_data, media_path):
-        if segments_data is None or (hasattr(segments_data, 'empty') and segments_data.empty):
+        segments = _parse_segments(segments_data)
+        if not segments:
             return "No segments to save"
         project: CutProject = {
             "version": "1.0",
             "source": media_path,
-            "segments": [],
+            "segments": segments,
         }
-        for row in segments_data:
-            project["segments"].append({
-                "index": int(row[0]),
-                "start": float(row[1]),
-                "end": float(row[2]),
-                "text": str(row[3]),
-                "keep": bool(row[4]),
-                "transition": str(row[5]),
-                "transition_duration": float(row[6]),
-            })
         json_path = os.path.splitext(media_path)[0] + ".json"
         save_project(project, json_path)
         return f"Project saved to {json_path}"
 
     def run_cut(segments_data, media_path, precise):
-        if segments_data is None or (hasattr(segments_data, 'empty') and segments_data.empty):
+        segments = _parse_segments(segments_data)
+        if not segments:
             return "No segments to cut"
         project: CutProject = {
             "version": "1.0",
             "source": media_path,
-            "segments": [],
+            "segments": segments,
         }
-        for row in segments_data:
-            project["segments"].append({
-                "index": int(row[0]),
-                "start": float(row[1]),
-                "end": float(row[2]),
-                "text": str(row[3]),
-                "keep": bool(row[4]),
-                "transition": str(row[5]),
-                "transition_duration": float(row[6]),
-            })
 
         segments = project_to_segments(project)
         if not segments:
