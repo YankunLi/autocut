@@ -80,6 +80,7 @@ def cut_segments_stream_copy(
     if precise:
         return _cut_segments_precise(input_path, output_path, segments, ext)
 
+    keyframes = _get_keyframes(input_path)
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
         for i, seg in enumerate(segments):
@@ -87,12 +88,21 @@ def cut_segments_stream_copy(
             if duration <= 0:
                 logging.warning(f"Skipping segment {i}: non-positive duration {duration}")
                 continue
+
+            if keyframes:
+                kf_before = _find_nearest_keyframe_before(keyframes, seg["start"])
+                seek_start = kf_before
+                seek_duration = seg["end"] - kf_before
+            else:
+                seek_start = seg["start"]
+                seek_duration = duration
+
             seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
             cmd = [
                 "ffmpeg", "-y",
-                "-ss", str(seg["start"]),
+                "-ss", str(seek_start),
                 "-i", input_path,
-                "-t", str(duration),
+                "-t", str(seek_duration),
                 "-c", "copy",
                 "-avoid_negative_ts", "make_zero",
                 seg_path,
@@ -112,61 +122,46 @@ def _cut_segments_precise(
     segments: list[dict[str, float]],
     ext: str,
 ) -> str:
-    keyframes = _get_keyframes(input_path)
-    if not keyframes:
-        logging.warning("Could not detect keyframes, falling back to stream copy")
-        return cut_segments_stream_copy(input_path, output_path, segments, precise=False)
+    is_video = ext in (".mp4", ".mov", ".mkv", ".avi", ".flv", ".f4v", ".webm")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
-        has_reencoded = False
         for i, seg in enumerate(segments):
             duration = seg["end"] - seg["start"]
             if duration <= 0:
                 logging.warning(f"Skipping segment {i}: non-positive duration {duration}")
                 continue
 
-            kf_before_start = _find_nearest_keyframe_before(keyframes, seg["start"])
-            kf_after_end = _find_nearest_keyframe_after(keyframes, seg["end"])
-
-            # If cut points already align with keyframes, use stream copy
-            if abs(seg["start"] - kf_before_start) < 0.01 and abs(seg["end"] - kf_after_end) < 0.01:
-                seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
+            seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
+            if is_video:
                 cmd = [
                     "ffmpeg", "-y",
                     "-ss", str(seg["start"]),
                     "-i", input_path,
                     "-t", str(duration),
-                    "-c", "copy",
-                    "-avoid_negative_ts", "make_zero",
+                    "-c:v", "libx264",
+                    "-c:a", "aac",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
                     seg_path,
                 ]
-                _run_ffmpeg(cmd)
-                seg_files.append(seg_path)
-                continue
-
-            # Need re-encode for frame-accurate boundaries
-            has_reencoded = True
-            seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
-            cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(kf_before_start),
-                "-i", input_path,
-                "-t", str(seg["end"] - kf_before_start),
-                "-c:v", "libx264",
-                "-c:a", "aac",
-                "-ss", str(seg["start"] - kf_before_start),
-                "-avoid_negative_ts", "make_zero",
-                seg_path,
-            ]
+            else:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(seg["start"]),
+                    "-i", input_path,
+                    "-t", str(duration),
+                    "-c:a", "libmp3lame" if ext == ".mp3" else "aac",
+                    seg_path,
+                ]
             _run_ffmpeg(cmd)
             seg_files.append(seg_path)
 
         if not seg_files:
             raise ValueError("All segments had non-positive duration")
 
-        if has_reencoded:
-            return _concat_segments_reencode(seg_files, output_path)
+        # Segments are already re-encoded with consistent parameters,
+        # so concat with stream copy (no double re-encode).
         return _concat_segments(seg_files, output_path)
 
 

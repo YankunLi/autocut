@@ -134,11 +134,13 @@ class WhisperModel(AbstractWhisperModel):
         prev_end = 0
         for r in transcribe_results:
             origin = r["origin_timestamp"]
+            origin_start_sec = origin["start"] / self.sample_rate
+            origin_end_sec = origin["end"] / self.sample_rate
             for s in r["segments"]:
-                start = s["start"] + origin["start"] / self.sample_rate
+                start = max(s["start"] + origin_start_sec, origin_start_sec)
                 end = min(
-                    s["end"] + origin["start"] / self.sample_rate,
-                    origin["end"] / self.sample_rate,
+                    s["end"] + origin_start_sec,
+                    origin_end_sec,
                 )
                 if start > end:
                     continue
@@ -372,12 +374,14 @@ class FasterWhisperModel(AbstractWhisperModel):
         prev_end = 0
         for r in transcribe_results:
             origin = r["origin_timestamp"]
+            origin_start_sec = origin["start"] / self.sample_rate
+            origin_end_sec = origin["end"] / self.sample_rate
             for seg in r["segments"]:
                 s = dict(start=seg.start, end=seg.end, text=seg.text)
-                start = s["start"] + origin["start"] / self.sample_rate
+                start = max(s["start"] + origin_start_sec, origin_start_sec)
                 end = min(
-                    s["end"] + origin["start"] / self.sample_rate,
-                    origin["end"] / self.sample_rate,
+                    s["end"] + origin_start_sec,
+                    origin_end_sec,
                 )
                 if start > end:
                     continue
