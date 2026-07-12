@@ -168,8 +168,9 @@ def main():
     )
     parser.add_argument(
         "--precise",
-        help="Frame-accurate cutting (slower, re-encodes at cut points that don't align with keyframes)",
+        help="Frame-accurate cutting (default: True). Use --no-precise for faster stream-copy cuts.",
         action=argparse.BooleanOptionalAction,
+        default=True,
     )
     parser.add_argument(
         "--merge-gap",

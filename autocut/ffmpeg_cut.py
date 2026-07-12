@@ -70,7 +70,7 @@ def cut_segments_stream_copy(
     input_path: str,
     output_path: str,
     segments: list[dict[str, float]],
-    precise: bool = False,
+    precise: bool = True,
 ) -> str:
     if not segments:
         raise ValueError("No segments to cut")

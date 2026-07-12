@@ -146,7 +146,7 @@ def create_ui():
             save_btn = gr.Button("Save Project JSON")
             cut_btn = gr.Button("Run Cut (stream copy)", variant="primary")
 
-        precise_chk = gr.Checkbox(label="Precise (frame-accurate, slower)", value=False)
+        precise_chk = gr.Checkbox(label="Precise (frame-accurate, recommended)", value=True)
 
         status = gr.Textbox(label="Status")
 
