@@ -70,15 +70,34 @@ def md_to_project(
 def project_to_segments(
     project: CutProject, merge_gap: float = 0.5
 ) -> list[dict[str, float]]:
-    kept = [s for s in project["segments"] if s["keep"]]
+    all_segs = sorted(project["segments"], key=lambda s: s["start"])
+    kept = [s for s in all_segs if s["keep"]]
     if not kept:
         return []
 
-    kept.sort(key=lambda s: s["start"])
+    # Group kept segments: only merge if no unchecked segment exists between them.
+    # Unchecked segments act as barriers that prevent merging across them.
+    groups = []
+    current_group = [kept[0]]
+    for s in kept[1:]:
+        prev_end = current_group[-1]["end"]
+        has_unchecked_between = any(
+            not u["keep"] and u["start"] < s["start"] and u["end"] > prev_end
+            for u in all_segs
+        )
+        if not has_unchecked_between and s["start"] - prev_end <= merge_gap:
+            current_group.append(s)
+        else:
+            groups.append(current_group)
+            current_group = [s]
+    groups.append(current_group)
 
-    raw = [{"start": s["start"], "end": s["end"]} for s in kept]
-    merged = utils.merge_adjacent_segments(raw, merge_gap)
-    return merged
+    result = []
+    for group in groups:
+        raw = [{"start": s["start"], "end": s["end"]} for s in group]
+        merged = utils.merge_adjacent_segments(raw, merge_gap)
+        result.extend(merged)
+    return result
 
 
 def save_project(project: CutProject, path: str) -> None:
