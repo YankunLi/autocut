@@ -22,7 +22,17 @@ def create_ui():
     from .ffmpeg_cut import cut_segments_stream_copy
     from . import utils
 
+    def _check_media(media_path):
+        if not media_path or not media_path.strip():
+            return "Please provide a media file path"
+        if not os.path.exists(media_path.strip()):
+            return f"Media file not found: {media_path.strip()}"
+        return None
+
     def load_file(media_path, srt_file, json_file, md_file):
+        err = _check_media(media_path)
+        if err:
+            return None, err
         if json_file is not None:
             project = load_project(json_file)
         elif srt_file is not None:
@@ -76,6 +86,9 @@ def create_ui():
         return result
 
     def save_project_json(segments_data, media_path):
+        err = _check_media(media_path)
+        if err:
+            return err
         segments = _parse_segments(segments_data)
         if not segments:
             return "No segments to save"
@@ -89,6 +102,9 @@ def create_ui():
         return f"Project saved to {json_path}"
 
     def run_cut(segments_data, media_path, precise):
+        err = _check_media(media_path)
+        if err:
+            return err
         segments = _parse_segments(segments_data)
         if not segments:
             return "No segments to cut"
