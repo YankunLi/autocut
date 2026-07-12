@@ -152,14 +152,18 @@ def remove_short_segments(segments, threshold, total_length):
 
 
 def merge_adjacent_segments(segments, threshold):
-    # Merge two adjacent segments if their distance < threshold
+    # Merge two adjacent segments if their distance < threshold.
+    # When merging, keep the transition from the LAST segment in the group,
+    # since transition applies at the boundary between this group and the next.
     results = []
     i = 0
     while i < len(segments):
-        s = segments[i]
+        s = dict(segments[i])
         for j in range(i + 1, len(segments)):
             if segments[j]["start"] < s["end"] + threshold:
                 s["end"] = segments[j]["end"]
+                s["transition"] = segments[j].get("transition", "cut")
+                s["transition_duration"] = segments[j].get("transition_duration", 0.0)
                 i = j
             else:
                 break

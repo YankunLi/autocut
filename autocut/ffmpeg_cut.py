@@ -66,6 +66,54 @@ def _find_nearest_keyframe_after(keyframes: list[float], time: float) -> float:
     return keyframes[-1] if keyframes else time
 
 
+def _apply_transitions(seg_files, segments, is_video, tmpdir):
+    """Apply fade/crossfade filters to segment files based on transition settings."""
+    result_files = []
+    for i, (seg_path, seg) in enumerate(zip(seg_files, segments)):
+        transition = seg.get("transition", "cut")
+        trans_dur = seg.get("transition_duration", 0.5) or 0.5
+        prev_transition = segments[i - 1].get("transition", "cut") if i > 0 else "cut"
+
+        needs_fade_in = i > 0 and prev_transition in ("fade", "crossfade")
+        needs_fade_out = transition in ("fade", "crossfade")
+
+        if not needs_fade_in and not needs_fade_out:
+            result_files.append(seg_path)
+            continue
+
+        dur = seg["end"] - seg["start"]
+        vfilters = []
+        afilters = []
+
+        if needs_fade_in:
+            if is_video:
+                vfilters.append(f"fade=t=in:st=0:d={trans_dur}")
+            afilters.append(f"afade=t=in:st=0:d={trans_dur}")
+
+        if needs_fade_out:
+            fade_out_st = max(0, dur - trans_dur)
+            if is_video:
+                vfilters.append(f"fade=t=out:st={fade_out_st}:d={trans_dur}")
+            afilters.append(f"afade=t=out:st={fade_out_st}:d={trans_dur}")
+
+        ext = os.path.splitext(seg_path)[1]
+        out_path = os.path.join(tmpdir, f"trans_{i:04d}{ext}")
+        cmd = ["ffmpeg", "-y", "-i", seg_path]
+        if is_video and vfilters:
+            cmd += ["-vf", ",".join(vfilters)]
+        if afilters:
+            cmd += ["-af", ",".join(afilters)]
+        if is_video:
+            cmd += ["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p"]
+        else:
+            cmd += ["-c:a", "libmp3lame" if ext == ".mp3" else "aac"]
+        cmd.append(out_path)
+        _run_ffmpeg(cmd)
+        result_files.append(out_path)
+
+    return result_files
+
+
 def cut_segments_stream_copy(
     input_path: str,
     output_path: str,
@@ -159,6 +207,13 @@ def _cut_segments_precise(
 
         if not seg_files:
             raise ValueError("All segments had non-positive duration")
+
+        # Apply fade/crossfade transitions if any segment has a non-cut transition
+        has_transitions = any(
+            s.get("transition", "cut") in ("fade", "crossfade") for s in segments
+        )
+        if has_transitions:
+            seg_files = _apply_transitions(seg_files, segments, is_video, tmpdir)
 
         # Segments are already re-encoded with consistent parameters,
         # so concat with stream copy (no double re-encode).
