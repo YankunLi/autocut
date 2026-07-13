@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import platform
@@ -39,6 +40,44 @@ class _CancelFlag:
 # Global cancel flags — one per operation type
 _transcribe_cancel = _CancelFlag()
 _cut_cancel = _CancelFlag()
+
+
+# --- Workspace config ---
+
+_CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".autocut")
+_CONFIG_FILE = os.path.join(_CONFIG_DIR, "config.json")
+
+
+def _load_config():
+    if os.path.exists(_CONFIG_FILE):
+        try:
+            with open(_CONFIG_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_config(cfg):
+    os.makedirs(_CONFIG_DIR, exist_ok=True)
+    with open(_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def _get_workspace():
+    cfg = _load_config()
+    ws = cfg.get("workspace", "")
+    if ws and os.path.isdir(ws):
+        return ws
+    return os.path.join(os.path.expanduser("~"), "autocut_workspace")
+
+
+def _set_workspace(path):
+    if not os.path.isdir(path):
+        os.makedirs(path, exist_ok=True)
+    cfg = _load_config()
+    cfg["workspace"] = path
+    _save_config(cfg)
 
 
 def create_ui():
@@ -248,11 +287,7 @@ def create_ui():
             return f"打开文件夹失败: {e}"
 
     def _find_existing_cut(project, media_path_str):
-        """Check if a cut video already exists for this exact project content.
-
-        Uses a content hash of the project segments to identify duplicate cuts.
-        Returns (video_path, json_path) if found, otherwise (None, None).
-        """
+        """Check if a cut video already exists for this exact project content."""
         import hashlib
         import json as json_mod
 
@@ -260,14 +295,16 @@ def create_ui():
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
         is_video_file = utils.is_video(media_path_str.lower())
         outext = "mp4" if is_video_file else "mp3"
-        base, _ = os.path.splitext(media_path_str)
-        dirname = os.path.dirname(media_path_str)
+        source_name = os.path.splitext(os.path.basename(media_path_str))[0]
+        workspace = _get_workspace()
+        source_dir = os.path.join(workspace, source_name)
+        if not os.path.isdir(source_dir):
+            return None, None
 
-        # Scan for existing _cut_*.json files matching this media
-        for fname in os.listdir(dirname):
+        for fname in os.listdir(source_dir):
             if not fname.endswith(".json"):
                 continue
-            fpath = os.path.join(dirname, fname)
+            fpath = os.path.join(source_dir, fname)
             try:
                 existing = load_project(fpath)
             except Exception:
@@ -278,7 +315,6 @@ def create_ui():
             existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
             if existing_hash != content_hash:
                 continue
-            # Hash matches — check if the corresponding video exists
             json_base = os.path.splitext(fpath)[0]
             video_path = json_base + "." + outext
             if os.path.exists(video_path):
@@ -319,9 +355,12 @@ def create_ui():
         is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        base, _ = os.path.splitext(path)
-        output_fn = f"{base}_cut_{timestamp}.{outext}"
-        json_fn = f"{base}_cut_{timestamp}.json"
+        source_name = os.path.splitext(os.path.basename(path))[0]
+        workspace = _get_workspace()
+        source_dir = os.path.join(workspace, source_name)
+        os.makedirs(source_dir, exist_ok=True)
+        output_fn = os.path.join(source_dir, f"{source_name}_cut_{timestamp}.{outext}")
+        json_fn = os.path.join(source_dir, f"{source_name}_cut_{timestamp}.json")
 
         total = len(cut_segs)
         try:
@@ -418,20 +457,14 @@ def create_ui():
 
         Returns a list of dicts: [{source, source_name, cuts: [{video, json, time_str}]}]
         """
-        import json as json_mod
-
         history = {}
-        # Look through common media directories — use _last_output_path and
-        # any previously seen media paths. For simplicity, scan the directory
-        # of the currently loaded media if available.
+        workspace = _get_workspace()
         search_dirs = set()
-        media_path = _last_output_path.get("value")
-        if media_path and os.path.exists(media_path):
-            search_dirs.add(os.path.dirname(media_path))
-
-        # Also scan directories of all _cut_*.json files we can find
-        # by checking the current working directory
-        search_dirs.add(os.getcwd())
+        if os.path.isdir(workspace):
+            for name in os.listdir(workspace):
+                candidate = os.path.join(workspace, name)
+                if os.path.isdir(candidate):
+                    search_dirs.add(candidate)
 
         for search_dir in search_dirs:
             if not os.path.isdir(search_dir):
@@ -549,6 +582,7 @@ def create_ui():
                 gr.Markdown("# AutoCut")
                 nav_cut_btn = gr.Button("视频剪辑", variant="secondary", size="sm")
                 nav_history_btn = gr.Button("历史记录", variant="secondary", size="sm")
+                nav_config_btn = gr.Button("配置", variant="secondary", size="sm")
 
             # --- Right content area ---
             with gr.Column(scale=5):
@@ -650,15 +684,32 @@ def create_ui():
                     _del_source_btn = gr.Button("del-source", visible=False, elem_id="del-source-action")
                     _del_cut_btn = gr.Button("del-cut", visible=False, elem_id="del-cut-action")
 
+                # === Config Panel ===
+                with gr.Column(visible=False) as config_panel:
+                    gr.Markdown("## 配置")
+                    workspace_tb = gr.Textbox(
+                        label="工作目录",
+                        value=_get_workspace(),
+                        info="剪辑结果将保存在此目录下，按原始视频名称建立子目录",
+                    )
+                    with gr.Row():
+                        save_workspace_btn = gr.Button("保存", variant="primary")
+                        open_workspace_btn = gr.Button("打开目录")
+                    workspace_status = gr.Textbox(label="", interactive=False)
+
         # --- Navigation ---
         def show_cut():
-            return gr.update(visible=True), gr.update(visible=False)
+            return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
 
         def show_history():
-            return gr.update(visible=False), gr.update(visible=True)
+            return gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
 
-        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel])
-        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel])
+        def show_config():
+            return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)
+
+        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel, config_panel])
+        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel, config_panel])
+        nav_config_btn.click(fn=show_config, inputs=[], outputs=[cut_panel, history_panel, config_panel])
 
         # --- Wire up events ---
 
@@ -684,9 +735,9 @@ def create_ui():
 
         # Also refresh history when switching to history panel
         nav_history_btn.click(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True), _refresh_history()),
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), _refresh_history()),
             inputs=[],
-            outputs=[cut_panel, history_panel, history_html],
+            outputs=[cut_panel, history_panel, config_panel, history_html],
         )
 
         transcribe_btn.click(
@@ -730,5 +781,24 @@ def create_ui():
             inputs=[segments_df, media_input],
             outputs=[cut_status],
         )
+
+        # Config events
+        def save_workspace(path):
+            path = path.strip()
+            if not path:
+                return "请输入工作目录路径"
+            try:
+                _set_workspace(path)
+                return f"工作目录已保存: {path}"
+            except Exception as e:
+                return f"保存失败: {e}"
+
+        def open_workspace():
+            ws = _get_workspace()
+            os.makedirs(ws, exist_ok=True)
+            return _open_directory(ws + os.sep)
+
+        save_workspace_btn.click(fn=save_workspace, inputs=[workspace_tb], outputs=[workspace_status])
+        open_workspace_btn.click(fn=open_workspace, inputs=[], outputs=[workspace_status])
 
     return app
