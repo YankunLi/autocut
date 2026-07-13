@@ -65,17 +65,23 @@ def create_ui():
         args.vad = "auto"
         args.device = device if device != "auto" else None
 
-        # Transcription can take minutes. Run in a background thread and
-        # poll a shared status dict so we can yield progress updates to
-        # Gradio without hitting the timeout.
-        result = {"status": "running", "srt_path": None, "error": None}
+        result = {"status": "running", "srt_path": None, "error": None, "step": "初始化..."}
 
         def _worker():
             try:
+                result["step"] = "正在加载 Whisper 模型（首次需下载，请耐心等待）..."
                 t = Transcribe(args)
+
+                result["step"] = "正在加载音频文件..."
                 audio = utils.load_audio(path, sr=t.sampling_rate)
+
+                result["step"] = "正在检测语音活动 (VAD)..."
                 speech_array_indices = t._detect_voice_activity(audio)
+
+                result["step"] = f"正在转录语音，共 {len(speech_array_indices)} 个片段（此步骤耗时较长）..."
                 transcribe_results = t._transcribe(path, audio, speech_array_indices)
+
+                result["step"] = "正在保存字幕文件..."
                 name, _ = os.path.splitext(path)
                 srt_path = name + ".srt"
                 t._save_srt(srt_path, transcribe_results)
@@ -90,25 +96,21 @@ def create_ui():
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
 
-        messages = [
-            "正在加载 Whisper 模型（首次需下载，请耐心等待）...",
-            "正在检测语音活动 (VAD)...",
-            "正在转录语音（此步骤耗时较长，请勿关闭页面）...",
-        ]
-        msg_idx = 0
+        last_step = None
         while result["status"] == "running":
-            if msg_idx < len(messages):
-                yield None, messages[msg_idx]
-                msg_idx += 1
+            step = result["step"]
+            if step != last_step:
+                yield None, step
+                last_step = step
             else:
                 elapsed = int(time.time() - _worker_start)
-                yield None, f"正在转录中...已用时 {elapsed} 秒"
-            time.sleep(3)
+                yield None, f"{step}  已用时 {elapsed} 秒"
+            time.sleep(2)
 
         if result["status"] == "error":
             yield None, f"转录失败: {result['error']}"
         else:
-            yield result["srt_path"], f"转录完成，已生成 {os.path.basename(result['srt_path'])}"
+            yield result["srt_path"], f"转录完成！已生成 {os.path.basename(result['srt_path'])}"
 
     # --- Step 3: load & display ---
 
