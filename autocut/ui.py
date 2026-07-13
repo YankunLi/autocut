@@ -23,23 +23,25 @@ def create_ui():
     from . import utils
 
     def _check_media(media_path):
-        if not media_path or not media_path.strip():
-            return "Please provide a media file path"
-        if not os.path.exists(media_path.strip()):
-            return f"Media file not found: {media_path.strip()}"
+        if not media_path:
+            return "Please provide a media file"
+        path = media_path if isinstance(media_path, str) else media_path.name
+        if not os.path.exists(path):
+            return f"Media file not found: {path}"
         return None
 
     def load_file(media_path, srt_file, json_file, md_file):
         err = _check_media(media_path)
         if err:
             return None, err
+        media_path_str = media_path if isinstance(media_path, str) else media_path.name
         if json_file is not None:
             project = load_project(json_file)
         elif srt_file is not None:
             if md_file is not None:
-                project = md_to_project(md_file, srt_file, media_path)
+                project = md_to_project(md_file, srt_file, media_path_str)
             else:
-                project = srt_to_project(srt_file, media_path)
+                project = srt_to_project(srt_file, media_path_str)
         else:
             return None, "Please provide an SRT or JSON file"
 
@@ -54,7 +56,7 @@ def create_ui():
                 seg["transition"],
                 seg["transition_duration"],
             ])
-        return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path)}"
+        return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path_str)}"
 
     def _parse_segments(segments_data):
         """Parse segments from Gradio Dataframe, handling both list and DataFrame inputs."""
@@ -85,19 +87,25 @@ def create_ui():
                 continue
         return result
 
+    def _resolve_media_path(media_path):
+        if media_path is None:
+            return None
+        return media_path if isinstance(media_path, str) else media_path.name
+
     def save_project_json(segments_data, media_path):
         err = _check_media(media_path)
         if err:
             return err
+        path = _resolve_media_path(media_path)
         segments = _parse_segments(segments_data)
         if not segments:
             return "No segments to save"
         project: CutProject = {
             "version": "1.0",
-            "source": media_path,
+            "source": path,
             "segments": segments,
         }
-        json_path = os.path.splitext(media_path)[0] + ".json"
+        json_path = os.path.splitext(path)[0] + ".json"
         save_project(project, json_path)
         return f"Project saved to {json_path}"
 
@@ -105,12 +113,13 @@ def create_ui():
         err = _check_media(media_path)
         if err:
             return err
+        path = _resolve_media_path(media_path)
         segments = _parse_segments(segments_data)
         if not segments:
             return "No segments to cut"
         project: CutProject = {
             "version": "1.0",
-            "source": media_path,
+            "source": path,
             "segments": segments,
         }
 
@@ -118,18 +127,18 @@ def create_ui():
         if not segments:
             return "No segments marked as keep"
 
-        is_video_file = utils.is_video(media_path.lower())
+        is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
-        output_fn = utils.change_ext(utils.add_cut(media_path), outext)
+        output_fn = utils.change_ext(utils.add_cut(path), outext)
 
-        cut_segments_stream_copy(media_path, output_fn, segments, precise=precise)
+        cut_segments_stream_copy(path, output_fn, segments, precise=precise)
         return f"Cut saved to {output_fn} ({len(segments)} segments)"
 
     with gr.Blocks(title="AutoCut Editor") as app:
         gr.Markdown("# AutoCut - Segment Editor")
 
         with gr.Row():
-            media_input = gr.Textbox(label="Media file path", placeholder="/path/to/video.mp4")
+            media_input = gr.File(label="Media file", file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"])
             srt_input = gr.File(label="SRT file", file_types=[".srt"])
             md_input = gr.File(label="MD file", file_types=[".md"])
             json_input = gr.File(label="Project JSON", file_types=[".json"])
