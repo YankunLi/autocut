@@ -416,92 +416,114 @@ def create_ui():
     _last_output_path = {"value": None}
 
     with gr.Blocks(title="AutoCut", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# AutoCut - 视频智能剪辑")
+        with gr.Row():
+            # --- Left sidebar navigation ---
+            with gr.Column(scale=1, min_width=180):
+                gr.Markdown("# AutoCut")
+                nav_cut_btn = gr.Button("视频剪辑", variant="secondary", size="sm")
+                nav_history_btn = gr.Button("历史记录", variant="secondary", size="sm")
 
-        # --- Step 1: Import media ---
-        with gr.Tab("1. 导入视频"):
-            gr.Markdown("上传需要剪辑的视频或音频文件。")
-            media_input = gr.File(
-                label="视频/音频文件",
-                file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"],
-            )
-            media_info = gr.Textbox(label="文件信息", interactive=False)
-            media_input.change(
-                fn=lambda f: f"已选择: {os.path.basename(f.name)}" if f else "",
-                inputs=[media_input],
-                outputs=[media_info],
-            )
+            # --- Right content area ---
+            with gr.Column(scale=5):
+                # === Video Cut Panel ===
+                with gr.Column(visible=True) as cut_panel:
+                    gr.Markdown("## 视频剪辑")
 
-        # --- Step 2: Transcribe ---
-        with gr.Tab("2. 生成字幕"):
-            with gr.Column():
-                gr.Markdown("### 自动转录\n使用 Whisper 模型从视频中生成 SRT 字幕文件。")
-                with gr.Row():
-                    lang_input = gr.Dropdown(
-                        choices=["zh", "en", "ja", "ko", "de", "fr", "es"],
-                        value="zh",
-                        label="语言",
-                    )
-                    whisper_mode_input = gr.Dropdown(
-                        choices=WhisperMode.get_values(),
-                        value=WhisperMode.WHISPER.value,
-                        label="Whisper 模式",
-                    )
-                    whisper_model_input = gr.Dropdown(
-                        choices=WhisperModel.get_values(),
-                        value=WhisperModel.SMALL.value,
-                        label="模型大小",
-                    )
-                    device_input = gr.Dropdown(
-                        choices=["auto", "cpu", "cuda"],
-                        value="auto",
-                        label="设备",
-                    )
-                with gr.Row():
-                    transcribe_btn = gr.Button("开始转录", variant="primary")
-                    cancel_transcribe_btn = gr.Button("取消转录", variant="stop", visible=False)
-                transcribe_status = gr.Textbox(label="进度", interactive=False)
-                transcribe_output = gr.File(label="生成的 SRT 文件", interactive=False)
+                    with gr.Tab("1. 导入视频"):
+                        gr.Markdown("上传需要剪辑的视频或音频文件。")
+                        media_input = gr.File(
+                            label="视频/音频文件",
+                            file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"],
+                        )
+                        media_info = gr.Textbox(label="文件信息", interactive=False)
+                        media_input.change(
+                            fn=lambda f: f"已选择: {os.path.basename(f.name)}" if f else "",
+                            inputs=[media_input],
+                            outputs=[media_info],
+                        )
 
-            gr.Markdown("---")
-            with gr.Column():
-                gr.Markdown("### 导入已有字幕\n如果已有 SRT/MD/JSON 文件，可直接上传。")
-                with gr.Row():
-                    srt_input = gr.File(label="SRT 文件", file_types=[".srt"])
-                    md_input = gr.File(label="MD 文件", file_types=[".md"])
-                    json_input = gr.File(label="JSON 项目文件", file_types=[".json"])
+                    with gr.Tab("2. 生成字幕"):
+                        with gr.Column():
+                            gr.Markdown("### 自动转录\n使用 Whisper 模型从视频中生成 SRT 字幕文件。")
+                            with gr.Row():
+                                lang_input = gr.Dropdown(
+                                    choices=["zh", "en", "ja", "ko", "de", "fr", "es"],
+                                    value="zh",
+                                    label="语言",
+                                )
+                                whisper_mode_input = gr.Dropdown(
+                                    choices=WhisperMode.get_values(),
+                                    value=WhisperMode.WHISPER.value,
+                                    label="Whisper 模式",
+                                )
+                                whisper_model_input = gr.Dropdown(
+                                    choices=WhisperModel.get_values(),
+                                    value=WhisperModel.SMALL.value,
+                                    label="模型大小",
+                                )
+                                device_input = gr.Dropdown(
+                                    choices=["auto", "cpu", "cuda"],
+                                    value="auto",
+                                    label="设备",
+                                )
+                            with gr.Row():
+                                transcribe_btn = gr.Button("开始转录", variant="primary")
+                                cancel_transcribe_btn = gr.Button("取消转录", variant="stop", visible=False)
+                            transcribe_status = gr.Textbox(label="进度", interactive=False)
+                            transcribe_output = gr.File(label="生成的 SRT 文件", interactive=False)
 
-        # --- Step 3: Edit segments ---
-        with gr.Tab("3. 编辑片段"):
-            gr.Markdown("加载字幕后，勾选要保留的片段，设置转场效果。")
-            load_btn = gr.Button("加载片段", variant="primary")
-            segments_df = gr.Dataframe(
-                headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
-                datatype=["number", "number", "number", "str", "bool", "str", "number"],
-                interactive=True,
-                label="片段列表",
-            )
+                        gr.Markdown("---")
+                        with gr.Column():
+                            gr.Markdown("### 导入已有字幕\n如果已有 SRT/MD/JSON 文件，可直接上传。")
+                            with gr.Row():
+                                srt_input = gr.File(label="SRT 文件", file_types=[".srt"])
+                                md_input = gr.File(label="MD 文件", file_types=[".md"])
+                                json_input = gr.File(label="JSON 项目文件", file_types=[".json"])
 
-            with gr.Accordion("转场类型说明", open=False):
-                gr.Markdown(
-                    "| 类型 | 含义 |\n|---|---|\n"
-                    "| cut | 硬切，直接跳到下一段 |\n"
-                    "| fade | 淡入淡出，当前片段淡出至黑屏，下一段淡入 |\n"
-                    "| crossfade | 交叉淡入淡出，当前片段淡出同时下一段淡入 |\n\n"
-                    "转场作用在片段结尾处。"
-                )
+                    with gr.Tab("3. 编辑片段"):
+                        gr.Markdown("加载字幕后，勾选要保留的片段，设置转场效果。")
+                        load_btn = gr.Button("加载片段", variant="primary")
+                        segments_df = gr.Dataframe(
+                            headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
+                            datatype=["number", "number", "number", "str", "bool", "str", "number"],
+                            interactive=True,
+                            label="片段列表",
+                        )
 
-        # --- Step 4: Cut ---
-        with gr.Tab("4. 剪辑视频"):
-            gr.Markdown("编辑完成后，点击剪辑按钮生成结果。")
-            with gr.Row():
-                precise_chk = gr.Checkbox(label="帧精确剪切（推荐）", value=True)
-            with gr.Row():
-                cut_btn = gr.Button("开始剪辑", variant="primary")
-                cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
-                save_btn = gr.Button("保存项目 JSON")
-                open_dir_btn = gr.Button("打开输出目录", visible=False)
-            cut_status = gr.Textbox(label="进度", interactive=False)
+                        with gr.Accordion("转场类型说明", open=False):
+                            gr.Markdown(
+                                "| 类型 | 含义 |\n|---|---|\n"
+                                "| cut | 硬切，直接跳到下一段 |\n"
+                                "| fade | 淡入淡出，当前片段淡出至黑屏，下一段淡入 |\n"
+                                "| crossfade | 交叉淡入淡出，当前片段淡出同时下一段淡入 |\n\n"
+                                "转场作用在片段结尾处。"
+                            )
+
+                    with gr.Tab("4. 剪辑视频"):
+                        gr.Markdown("编辑完成后，点击剪辑按钮生成结果。")
+                        with gr.Row():
+                            precise_chk = gr.Checkbox(label="帧精确剪切（推荐）", value=True)
+                        with gr.Row():
+                            cut_btn = gr.Button("开始剪辑", variant="primary")
+                            cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
+                            save_btn = gr.Button("保存项目 JSON")
+                            open_dir_btn = gr.Button("打开输出目录", visible=False)
+                        cut_status = gr.Textbox(label="进度", interactive=False)
+
+                # === History Panel ===
+                with gr.Column(visible=False) as history_panel:
+                    gr.Markdown("## 历史记录")
+                    gr.Markdown("暂无剪辑记录")
+
+        # --- Navigation ---
+        def show_cut():
+            return gr.update(visible=True), gr.update(visible=False)
+
+        def show_history():
+            return gr.update(visible=False), gr.update(visible=True)
+
+        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel])
+        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel])
 
         # --- Wire up events ---
 
