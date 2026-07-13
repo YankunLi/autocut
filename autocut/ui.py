@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 from .schema import (
     CutProject,
@@ -21,20 +22,76 @@ def create_ui():
 
     from .ffmpeg_cut import cut_segments_stream_copy
     from . import utils
+    from .type import WhisperMode, WhisperModel
 
-    def _check_media(media_path):
-        if not media_path:
-            return "Please provide a media file"
-        path = media_path if isinstance(media_path, str) else media_path.name
+    # --- helpers ---
+
+    def _resolve_media_path(media_path):
+        if media_path is None:
+            return None
+        return media_path if isinstance(media_path, str) else media_path.name
+
+    def _check_file(file_obj, label="File"):
+        if not file_obj:
+            return f"请提供{label}"
+        path = file_obj if isinstance(file_obj, str) else file_obj.name
         if not os.path.exists(path):
-            return f"Media file not found: {path}"
+            return f"{label}不存在: {path}"
         return None
 
-    def load_file(media_path, srt_file, json_file, md_file):
-        err = _check_media(media_path)
+    # --- Step 2: transcribe ---
+
+    def transcribe_media(media_path, lang, whisper_mode, whisper_model_name, device):
+        path = _resolve_media_path(media_path)
+        if not path:
+            yield None, "请先上传视频/音频文件"
+            return
+
+        from .transcribe import Transcribe
+
+        class _Args:
+            pass
+
+        args = _Args()
+        args.inputs = [path]
+        args.lang = lang
+        args.whisper_mode = whisper_mode
+        args.whisper_model = whisper_model_name
+        args.openai_rpm = 3
+        args.prompt = ""
+        args.encoding = "utf-8"
+        args.force = True
+        args.vad = "auto"
+        args.device = device if device != "auto" else None
+
+        try:
+            yield None, "正在加载 Whisper 模型..."
+            t = Transcribe(args)
+
+            yield None, "正在检测语音活动 (VAD)..."
+            audio = utils.load_audio(path, sr=t.sampling_rate)
+            speech_array_indices = t._detect_voice_activity(audio)
+
+            yield None, f"正在转录语音，共 {len(speech_array_indices)} 个片段..."
+            transcribe_results = t._transcribe(path, audio, speech_array_indices)
+
+            name, _ = os.path.splitext(path)
+            srt_path = name + ".srt"
+            t._save_srt(srt_path, transcribe_results)
+            t._save_md(name + ".md", srt_path, path)
+
+            yield srt_path, f"转录完成，已生成 {os.path.basename(srt_path)}"
+        except Exception as e:
+            yield None, f"转录失败: {e}"
+
+    # --- Step 3: load & display ---
+
+    def load_segments(media_path, srt_file, json_file, md_file):
+        err = _check_file(media_path, "视频/音频文件")
         if err:
             return None, err
-        media_path_str = media_path if isinstance(media_path, str) else media_path.name
+        media_path_str = _resolve_media_path(media_path)
+
         if json_file is not None:
             project = load_project(json_file)
         elif srt_file is not None:
@@ -43,7 +100,7 @@ def create_ui():
             else:
                 project = srt_to_project(srt_file, media_path_str)
         else:
-            return None, "Please provide an SRT or JSON file"
+            return None, "请提供 SRT 或 JSON 文件"
 
         rows = []
         for seg in project["segments"]:
@@ -56,10 +113,9 @@ def create_ui():
                 seg["transition"],
                 seg["transition_duration"],
             ])
-        return rows, f"Loaded {len(project['segments'])} segments from {os.path.basename(media_path_str)}"
+        return rows, f"已加载 {len(project['segments'])} 个片段"
 
     def _parse_segments(segments_data):
-        """Parse segments from Gradio Dataframe, handling both list and DataFrame inputs."""
         if segments_data is None:
             return None
         if hasattr(segments_data, 'empty') and segments_data.empty:
@@ -87,19 +143,99 @@ def create_ui():
                 continue
         return result
 
-    def _resolve_media_path(media_path):
-        if media_path is None:
-            return None
-        return media_path if isinstance(media_path, str) else media_path.name
+    # --- Step 4: cut ---
+
+    def run_cut(segments_data, media_path, precise):
+        err = _check_file(media_path, "视频/音频文件")
+        if err:
+            yield err
+            return
+        path = _resolve_media_path(media_path)
+        segments = _parse_segments(segments_data)
+        if not segments:
+            yield "没有可剪辑的片段"
+            return
+        project: CutProject = {
+            "version": "1.0",
+            "source": path,
+            "segments": segments,
+        }
+
+        cut_segs = project_to_segments(project)
+        if not cut_segs:
+            yield "没有勾选保留的片段"
+            return
+
+        is_video_file = utils.is_video(path.lower())
+        outext = "mp4" if is_video_file else "mp3"
+        output_fn = utils.change_ext(utils.add_cut(path), outext)
+
+        total = len(cut_segs)
+        try:
+            for i, msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
+                yield msg
+            yield f"剪辑完成！已保存到 {output_fn}（共 {total} 个片段）"
+        except Exception as e:
+            yield f"剪辑失败: {e}"
+
+    def _cut_with_progress(input_path, output_path, segments, precise, is_video_file):
+        from .ffmpeg_cut import _run_ffmpeg
+        import tempfile
+        from .ffmpeg_cut import _concat_segments
+
+        ext = os.path.splitext(output_path)[1]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            seg_files = []
+            total = len(segments)
+            for i, seg in enumerate(segments):
+                duration = seg["end"] - seg["start"]
+                if duration <= 0:
+                    continue
+                yield f"正在提取片段 {i + 1}/{total}（{duration:.1f}秒）..."
+                seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
+                if is_video_file:
+                    cmd = [
+                        "ffmpeg", "-y",
+                        "-ss", str(seg["start"]),
+                        "-i", input_path,
+                        "-t", str(duration),
+                        "-c:v", "libx264", "-c:a", "aac",
+                        "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        seg_path,
+                    ]
+                else:
+                    cmd = [
+                        "ffmpeg", "-y",
+                        "-ss", str(seg["start"]),
+                        "-i", input_path,
+                        "-t", str(duration),
+                        "-c:a", "libmp3lame" if ext == ".mp3" else "aac",
+                        seg_path,
+                    ]
+                _run_ffmpeg(cmd)
+                seg_files.append(seg_path)
+
+            # Apply transitions
+            has_transitions = any(
+                s.get("transition", "cut") in ("fade", "crossfade") for s in segments
+            )
+            if has_transitions:
+                yield "正在应用转场效果..."
+                from .ffmpeg_cut import _apply_transitions
+                seg_files = _apply_transitions(seg_files, segments, is_video_file, tmpdir)
+
+            yield "正在合并片段..."
+            _concat_segments(seg_files, output_path)
 
     def save_project_json(segments_data, media_path):
-        err = _check_media(media_path)
+        err = _check_file(media_path, "视频/音频文件")
         if err:
             return err
         path = _resolve_media_path(media_path)
         segments = _parse_segments(segments_data)
         if not segments:
-            return "No segments to save"
+            return "没有片段可保存"
         project: CutProject = {
             "version": "1.0",
             "source": path,
@@ -107,72 +243,118 @@ def create_ui():
         }
         json_path = os.path.splitext(path)[0] + ".json"
         save_project(project, json_path)
-        return f"Project saved to {json_path}"
+        return f"项目已保存到 {json_path}"
 
-    def run_cut(segments_data, media_path, precise):
-        err = _check_media(media_path)
-        if err:
-            return err
-        path = _resolve_media_path(media_path)
-        segments = _parse_segments(segments_data)
-        if not segments:
-            return "No segments to cut"
-        project: CutProject = {
-            "version": "1.0",
-            "source": path,
-            "segments": segments,
-        }
+    # --- Build UI ---
 
-        segments = project_to_segments(project)
-        if not segments:
-            return "No segments marked as keep"
+    with gr.Blocks(title="AutoCut", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# AutoCut - 视频智能剪辑")
 
-        is_video_file = utils.is_video(path.lower())
-        outext = "mp4" if is_video_file else "mp3"
-        output_fn = utils.change_ext(utils.add_cut(path), outext)
+        # --- Step 1: Import media ---
+        with gr.Tab("1. 导入视频"):
+            gr.Markdown("上传需要剪辑的视频或音频文件。")
+            media_input = gr.File(
+                label="视频/音频文件",
+                file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"],
+            )
+            media_info = gr.Textbox(label="文件信息", interactive=False)
+            media_input.change(
+                fn=lambda f: f"已选择: {os.path.basename(f.name)}" if f else "",
+                inputs=[media_input],
+                outputs=[media_info],
+            )
 
-        cut_segments_stream_copy(path, output_fn, segments, precise=precise)
-        return f"Cut saved to {output_fn} ({len(segments)} segments)"
+        # --- Step 2: Transcribe ---
+        with gr.Tab("2. 生成字幕"):
+            with gr.Column():
+                gr.Markdown("### 自动转录\n使用 Whisper 模型从视频中生成 SRT 字幕文件。")
+                with gr.Row():
+                    lang_input = gr.Dropdown(
+                        choices=["zh", "en", "ja", "ko", "de", "fr", "es"],
+                        value="zh",
+                        label="语言",
+                    )
+                    whisper_mode_input = gr.Dropdown(
+                        choices=WhisperMode.get_values(),
+                        value=WhisperMode.WHISPER.value,
+                        label="Whisper 模式",
+                    )
+                    whisper_model_input = gr.Dropdown(
+                        choices=WhisperModel.get_values(),
+                        value=WhisperModel.SMALL.value,
+                        label="模型大小",
+                    )
+                    device_input = gr.Dropdown(
+                        choices=["auto", "cpu", "cuda"],
+                        value="auto",
+                        label="设备",
+                    )
+                transcribe_btn = gr.Button("开始转录", variant="primary")
+                transcribe_status = gr.Textbox(label="进度", interactive=False)
+                transcribe_output = gr.File(label="生成的 SRT 文件", interactive=False)
 
-    with gr.Blocks(title="AutoCut Editor") as app:
-        gr.Markdown("# AutoCut - Segment Editor")
+            gr.Markdown("---")
+            with gr.Column():
+                gr.Markdown("### 导入已有字幕\n如果已有 SRT/MD/JSON 文件，可直接上传。")
+                with gr.Row():
+                    srt_input = gr.File(label="SRT 文件", file_types=[".srt"])
+                    md_input = gr.File(label="MD 文件", file_types=[".md"])
+                    json_input = gr.File(label="JSON 项目文件", file_types=[".json"])
 
-        with gr.Row():
-            media_input = gr.File(label="Media file", file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"])
-            srt_input = gr.File(label="SRT file", file_types=[".srt"])
-            md_input = gr.File(label="MD file", file_types=[".md"])
-            json_input = gr.File(label="Project JSON", file_types=[".json"])
-            load_btn = gr.Button("Load", variant="primary")
+        # --- Step 3: Edit segments ---
+        with gr.Tab("3. 编辑片段"):
+            gr.Markdown("加载字幕后，勾选要保留的片段，设置转场效果。")
+            load_btn = gr.Button("加载片段", variant="primary")
+            segments_df = gr.Dataframe(
+                headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
+                datatype=["number", "number", "number", "str", "bool", "str", "number"],
+                interactive=True,
+                label="片段列表",
+            )
 
-        segments_df = gr.Dataframe(
-            headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
-            datatype=["number", "number", "number", "str", "bool", "str", "number"],
-            interactive=True,
-            label="Segments (edit Keep/Transition columns, then cut)",
+            with gr.Accordion("转场类型说明", open=False):
+                gr.Markdown(
+                    "| 类型 | 含义 |\n|---|---|\n"
+                    "| cut | 硬切，直接跳到下一段 |\n"
+                    "| fade | 淡入淡出，当前片段淡出至黑屏，下一段淡入 |\n"
+                    "| crossfade | 交叉淡入淡出，当前片段淡出同时下一段淡入 |\n\n"
+                    "转场作用在片段结尾处。"
+                )
+
+        # --- Step 4: Cut ---
+        with gr.Tab("4. 剪辑视频"):
+            gr.Markdown("编辑完成后，点击剪辑按钮生成结果。")
+            with gr.Row():
+                precise_chk = gr.Checkbox(label="帧精确剪切（推荐）", value=True)
+            with gr.Row():
+                cut_btn = gr.Button("开始剪辑", variant="primary")
+                save_btn = gr.Button("保存项目 JSON")
+            cut_status = gr.Textbox(label="进度", interactive=False)
+
+        # --- Wire up events ---
+
+        transcribe_btn.click(
+            fn=transcribe_media,
+            inputs=[media_input, lang_input, whisper_mode_input, whisper_model_input, device_input],
+            outputs=[transcribe_output, transcribe_status],
         )
-
-        with gr.Row():
-            save_btn = gr.Button("Save Project JSON")
-            cut_btn = gr.Button("Run Cut (stream copy)", variant="primary")
-
-        precise_chk = gr.Checkbox(label="Precise (frame-accurate, recommended)", value=True)
-
-        status = gr.Textbox(label="Status")
 
         load_btn.click(
-            fn=load_file,
+            fn=load_segments,
             inputs=[media_input, srt_input, json_input, md_input],
-            outputs=[segments_df, status],
+            outputs=[segments_df, cut_status],
         )
-        save_btn.click(
-            fn=save_project_json,
-            inputs=[segments_df, media_input],
-            outputs=[status],
-        )
+
         cut_btn.click(
             fn=run_cut,
             inputs=[segments_df, media_input, precise_chk],
-            outputs=[status],
+            outputs=[cut_status],
+        )
+
+        save_btn.click(
+            fn=save_project_json,
+            inputs=[segments_df, media_input],
+            outputs=[cut_status],
         )
 
     return app
