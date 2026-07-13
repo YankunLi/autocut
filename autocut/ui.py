@@ -247,6 +247,44 @@ def create_ui():
         except Exception as e:
             return f"打开文件夹失败: {e}"
 
+    def _find_existing_cut(project, media_path_str):
+        """Check if a cut video already exists for this exact project content.
+
+        Uses a content hash of the project segments to identify duplicate cuts.
+        Returns (video_path, json_path) if found, otherwise (None, None).
+        """
+        import hashlib
+        import json as json_mod
+
+        content = json_mod.dumps(project["segments"], sort_keys=True, ensure_ascii=False)
+        content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
+        is_video_file = utils.is_video(media_path_str.lower())
+        outext = "mp4" if is_video_file else "mp3"
+        base, _ = os.path.splitext(media_path_str)
+        dirname = os.path.dirname(media_path_str)
+
+        # Scan for existing _cut_*.json files matching this media
+        for fname in os.listdir(dirname):
+            if not fname.endswith(".json"):
+                continue
+            fpath = os.path.join(dirname, fname)
+            try:
+                existing = load_project(fpath)
+            except Exception:
+                continue
+            if existing.get("source") != media_path_str:
+                continue
+            existing_content = json_mod.dumps(existing["segments"], sort_keys=True, ensure_ascii=False)
+            existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
+            if existing_hash != content_hash:
+                continue
+            # Hash matches — check if the corresponding video exists
+            json_base = os.path.splitext(fpath)[0]
+            video_path = json_base + "." + outext
+            if os.path.exists(video_path):
+                return video_path, fpath
+        return None, None
+
     def run_cut(segments_data, media_path, precise):
         err = _check_file(media_path, "视频/音频文件")
         if err:
@@ -268,11 +306,22 @@ def create_ui():
             yield "没有勾选保留的片段", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
             return
 
+        # Skip cutting if output already exists for this exact project
+        existing_video, existing_json = _find_existing_cut(project, path)
+        if existing_video:
+            yield (f"剪辑视频已存在，跳过重复剪辑：\n视频: {existing_video}\n项目: {existing_json}",
+                   gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True))
+            _last_output_path["value"] = existing_video
+            return
+
         _cut_cancel.reset()
 
         is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
-        output_fn = utils.change_ext(utils.add_cut(path), outext)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        base, _ = os.path.splitext(path)
+        output_fn = f"{base}_cut_{timestamp}.{outext}"
+        json_fn = f"{base}_cut_{timestamp}.json"
 
         total = len(cut_segs)
         try:
@@ -281,7 +330,8 @@ def create_ui():
                     yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
                     return
                 yield msg, gr.update(interactive=False), gr.update(interactive=True), gr.update(visible=False)
-            yield f"剪辑完成！已保存到 {output_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True)
+            save_project(project, json_fn)
+            yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True)
             _last_output_path["value"] = output_fn
         except Exception as e:
             yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
