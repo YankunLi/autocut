@@ -2,6 +2,9 @@ import json
 import logging
 import os
 import platform
+import random
+import shutil
+import string
 import subprocess
 import time
 import threading
@@ -78,6 +81,13 @@ def _set_workspace(path):
     cfg = _load_config()
     cfg["workspace"] = path
     _save_config(cfg)
+
+
+def _gen_dirname(source_name):
+    """Generate a directory name: YYYYMMDD_HHMMSS_<random4>_<source_name>"""
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    rand4 = "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
+    return f"{timestamp}_{rand4}_{source_name}"
 
 
 def create_ui():
@@ -295,31 +305,85 @@ def create_ui():
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
         is_video_file = utils.is_video(media_path_str.lower())
         outext = "mp4" if is_video_file else "mp3"
-        source_name = os.path.splitext(os.path.basename(media_path_str))[0]
-        workspace = _get_workspace()
-        source_dir = os.path.join(workspace, source_name)
-        if not os.path.isdir(source_dir):
+
+        source_dir = _get_source_dir(media_path_str)
+        if not source_dir or not os.path.isdir(source_dir):
             return None, None
 
-        for fname in os.listdir(source_dir):
-            if not fname.endswith(".json"):
+        # Scan cut subdirectories
+        for name in os.listdir(source_dir):
+            cut_dir = os.path.join(source_dir, name)
+            if not os.path.isdir(cut_dir):
                 continue
-            fpath = os.path.join(source_dir, fname)
-            try:
-                existing = load_project(fpath)
-            except Exception:
-                continue
-            if existing.get("source") != media_path_str:
-                continue
-            existing_content = json_mod.dumps(existing["segments"], sort_keys=True, ensure_ascii=False)
-            existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
-            if existing_hash != content_hash:
-                continue
-            json_base = os.path.splitext(fpath)[0]
-            video_path = json_base + "." + outext
-            if os.path.exists(video_path):
-                return video_path, fpath
+            for fname in os.listdir(cut_dir):
+                if not fname.endswith(".json"):
+                    continue
+                fpath = os.path.join(cut_dir, fname)
+                try:
+                    existing = load_project(fpath)
+                except Exception:
+                    continue
+                if existing.get("source") != media_path_str:
+                    continue
+                existing_content = json_mod.dumps(existing["segments"], sort_keys=True, ensure_ascii=False)
+                existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
+                if existing_hash != content_hash:
+                    continue
+                json_base = os.path.splitext(fpath)[0]
+                video_path = json_base + "." + outext
+                if os.path.exists(video_path):
+                    return video_path, fpath
         return None, None
+
+    def _get_source_dir(media_path_str):
+        """Find or create the project directory for a source media file.
+
+        Layout: workspace/YYYYMMDD_HHMMSS_<rand4>_<source_name>/
+        If a project dir already exists for this source (contains a .meta marker),
+        return it. Otherwise caller should create a new one.
+        """
+        workspace = _get_workspace()
+        source_name = os.path.splitext(os.path.basename(media_path_str))[0]
+        if os.path.isdir(workspace):
+            for name in os.listdir(workspace):
+                candidate = os.path.join(workspace, name)
+                if not os.path.isdir(candidate):
+                    continue
+                meta_path = os.path.join(candidate, ".autocut_meta.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, encoding="utf-8") as f:
+                            meta = json.load(f)
+                        if meta.get("source") == media_path_str:
+                            return candidate
+                    except Exception:
+                        pass
+        return None
+
+    def _create_source_dir(media_path_str):
+        """Create a new project directory for a source media file."""
+        workspace = _get_workspace()
+        source_name = os.path.splitext(os.path.basename(media_path_str))[0]
+        dirname = _gen_dirname(source_name)
+        source_dir = os.path.join(workspace, dirname)
+        os.makedirs(source_dir, exist_ok=True)
+        # Write marker file
+        meta = {"source": media_path_str, "created": time.strftime("%Y-%m-%d %H:%M:%S")}
+        with open(os.path.join(source_dir, ".autocut_meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        # Copy source media into project dir
+        dest_media = os.path.join(source_dir, os.path.basename(media_path_str))
+        if not os.path.exists(dest_media):
+            shutil.copy2(media_path_str, dest_media)
+        # Copy SRT if it exists next to the source
+        base, _ = os.path.splitext(media_path_str)
+        for ext in (".srt", ".md"):
+            src = base + ext
+            if os.path.exists(src):
+                dest = os.path.join(source_dir, os.path.basename(src))
+                if not os.path.exists(dest):
+                    shutil.copy2(src, dest)
+        return source_dir
 
     def run_cut(segments_data, media_path, precise):
         err = _check_file(media_path, "视频/音频文件")
@@ -352,15 +416,20 @@ def create_ui():
 
         _cut_cancel.reset()
 
+        # Ensure source project dir exists (copy source + srt into workspace)
+        source_dir = _get_source_dir(path)
+        if not source_dir:
+            source_dir = _create_source_dir(path)
+
         is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
         source_name = os.path.splitext(os.path.basename(path))[0]
-        workspace = _get_workspace()
-        source_dir = os.path.join(workspace, source_name)
-        os.makedirs(source_dir, exist_ok=True)
-        output_fn = os.path.join(source_dir, f"{source_name}_cut_{timestamp}.{outext}")
-        json_fn = os.path.join(source_dir, f"{source_name}_cut_{timestamp}.json")
+        # Each cut gets its own subdirectory
+        cut_dirname = _gen_dirname(source_name + "_cut")
+        cut_dir = os.path.join(source_dir, cut_dirname)
+        os.makedirs(cut_dir, exist_ok=True)
+        output_fn = os.path.join(cut_dir, f"{source_name}_cut.{outext}")
+        json_fn = os.path.join(cut_dir, f"{source_name}_cut.json")
 
         total = len(cut_segs)
         try:
@@ -453,60 +522,73 @@ def create_ui():
     # --- History ---
 
     def _scan_history():
-        """Scan for cut projects grouped by source media file.
+        """Scan workspace for project directories grouped by source media file.
 
-        Returns a list of dicts: [{source, source_name, cuts: [{video, json, time_str}]}]
+        Layout:
+          workspace/20260713_153045_a1b2_demo/   <- source project dir
+            .autocut_meta.json
+            demo.mp4
+            demo.srt
+            20260713_160000_c3d4_demo_cut/       <- cut result dir
+              demo_cut.mp4
+              demo_cut.json
         """
-        history = {}
+        history = []
         workspace = _get_workspace()
-        search_dirs = set()
-        if os.path.isdir(workspace):
-            for name in os.listdir(workspace):
-                candidate = os.path.join(workspace, name)
-                if os.path.isdir(candidate):
-                    search_dirs.add(candidate)
+        if not os.path.isdir(workspace):
+            return history
 
-        for search_dir in search_dirs:
-            if not os.path.isdir(search_dir):
+        for dirname in sorted(os.listdir(workspace), reverse=True):
+            source_dir = os.path.join(workspace, dirname)
+            if not os.path.isdir(source_dir):
                 continue
-            for fname in os.listdir(search_dir):
-                if not fname.endswith(".json") or "_cut_" not in fname:
-                    continue
-                fpath = os.path.join(search_dir, fname)
-                try:
-                    proj = load_project(fpath)
-                except Exception:
-                    continue
-                source = proj.get("source", "")
-                if not source:
-                    continue
-                if source not in history:
-                    history[source] = {
-                        "source": source,
-                        "source_name": os.path.basename(source),
-                        "cuts": [],
-                    }
-                json_base = os.path.splitext(fpath)[0]
-                # Find corresponding video file
-                video_path = None
-                for ext in (".mp4", ".mov", ".mkv", ".avi", ".mp3", ".wav", ".m4a"):
-                    candidate = json_base + ext
-                    if os.path.exists(candidate):
-                        video_path = candidate
-                        break
-                # Extract timestamp from filename like demo_cut_20260713_153045
-                ts_part = fname.replace("_cut_", "|").split("|")[-1].replace(".json", "")
-                time_str = ts_part if ts_part else "?"
-                history[source]["cuts"].append({
-                    "video": video_path or "",
-                    "json": fpath,
-                    "time_str": time_str,
-                })
+            meta_path = os.path.join(source_dir, ".autocut_meta.json")
+            if not os.path.exists(meta_path):
+                continue
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+            except Exception:
+                continue
+            source = meta.get("source", "")
+            source_name = os.path.basename(source) if source else dirname
+            created = meta.get("created", "")
 
-        # Sort cuts by time within each source
-        for entry in history.values():
-            entry["cuts"].sort(key=lambda c: c["time_str"])
-        return list(history.values())
+            cuts = []
+            for sub_name in sorted(os.listdir(source_dir), reverse=True):
+                cut_dir = os.path.join(source_dir, sub_name)
+                if not os.path.isdir(cut_dir):
+                    continue
+                # Look for .json project file inside cut dir
+                for fname in os.listdir(cut_dir):
+                    if not fname.endswith(".json"):
+                        continue
+                    json_path = os.path.join(cut_dir, fname)
+                    video_path = None
+                    json_base = os.path.splitext(json_path)[0]
+                    for ext in (".mp4", ".mov", ".mkv", ".avi", ".mp3", ".wav", ".m4a"):
+                        candidate = json_base + ext
+                        if os.path.exists(candidate):
+                            video_path = candidate
+                            break
+                    cuts.append({
+                        "video": video_path or "",
+                        "json": json_path,
+                        "cut_dir": cut_dir,
+                        "cut_dirname": sub_name,
+                    })
+                    break  # one json per cut dir
+
+            history.append({
+                "source": source,
+                "source_name": source_name,
+                "source_dir": source_dir,
+                "source_dirname": dirname,
+                "created": created,
+                "cuts": cuts,
+            })
+
+        return history
 
     def _refresh_history():
         """Build HTML for the history panel."""
@@ -516,13 +598,14 @@ def create_ui():
 
         html_parts = []
         for rec in records:
+            source_dirname = rec["source_dirname"]
             source_name = rec["source_name"]
-            source = rec["source"]
-            source_id = str(hash(source))[-8:]
+            created = rec["created"]
+            source_id = str(hash(rec["source_dir"]))[-8:]
             html_parts.append(
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
                 "<div style='display:flex; justify-content:space-between; align-items:center;'>"
-                f"<b>{source_name}</b>"
+                f"<div><b>{source_dirname}</b><br><span style='color:#666; font-size:12px;'>{source_name} &nbsp; {created}</span></div>"
                 f"<button onclick=\"document.querySelector('#del-src-{source_id}').click()\" "
                 "style='color:#e74c3c; background:none; border:none; cursor:pointer; font-size:14px;'>"
                 "删除全部</button>"
@@ -530,11 +613,11 @@ def create_ui():
             )
             for cut in rec["cuts"]:
                 video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
-                time_str = cut["time_str"]
-                cut_id = str(hash(cut["json"]))[-8:]
+                cut_dirname = cut["cut_dirname"]
+                cut_id = str(hash(cut["cut_dir"]))[-8:]
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
-                    f"<span>{time_str} - {video_name}</span>"
+                    f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
                     f"<button onclick=\"document.querySelector('#del-cut-{cut_id}').click()\" "
                     "style='color:#e67e22; background:none; border:none; cursor:pointer; font-size:13px;'>"
                     "删除</button>"
@@ -543,32 +626,16 @@ def create_ui():
             html_parts.append("</div>")
         return "".join(html_parts)
 
-    def _delete_source(source_path):
-        """Delete a source record: remove all associated cut videos and json files."""
-        records = _scan_history()
-        for rec in records:
-            if rec["source"] == source_path:
-                for cut in rec["cuts"]:
-                    if cut["video"] and os.path.exists(cut["video"]):
-                        os.remove(cut["video"])
-                    if os.path.exists(cut["json"]):
-                        os.remove(cut["json"])
-                break
+    def _delete_source(source_dir):
+        """Delete a source project directory and all its contents."""
+        if os.path.isdir(source_dir):
+            shutil.rmtree(source_dir)
         return _refresh_history()
 
-    def _delete_cut(json_path):
-        """Delete a single cut result (video + json)."""
-        try:
-            proj = load_project(json_path)
-        except Exception:
-            pass
-        json_base = os.path.splitext(json_path)[0]
-        for ext in (".mp4", ".mov", ".mkv", ".avi", ".mp3", ".wav", ".m4a"):
-            candidate = json_base + ext
-            if os.path.exists(candidate):
-                os.remove(candidate)
-        if os.path.exists(json_path):
-            os.remove(json_path)
+    def _delete_cut(cut_dir):
+        """Delete a single cut result directory."""
+        if os.path.isdir(cut_dir):
+            shutil.rmtree(cut_dir)
         return _refresh_history()
 
     # --- Build UI ---
