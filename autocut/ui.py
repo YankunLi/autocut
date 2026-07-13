@@ -1,5 +1,7 @@
 import logging
 import os
+import platform
+import subprocess
 import time
 import threading
 
@@ -11,6 +13,32 @@ from .schema import (
     srt_to_project,
     md_to_project,
 )
+
+
+class _CancelFlag:
+    """Thread-safe cancel flag shared between UI and worker threads."""
+
+    def __init__(self):
+        self._cancelled = False
+        self._lock = threading.Lock()
+
+    def cancel(self):
+        with self._lock:
+            self._cancelled = True
+
+    @property
+    def cancelled(self):
+        with self._lock:
+            return self._cancelled
+
+    def reset(self):
+        with self._lock:
+            self._cancelled = False
+
+
+# Global cancel flags — one per operation type
+_transcribe_cancel = _CancelFlag()
+_cut_cancel = _CancelFlag()
 
 
 def create_ui():
@@ -45,8 +73,10 @@ def create_ui():
     def transcribe_media(media_path, lang, whisper_mode, whisper_model_name, device):
         path = _resolve_media_path(media_path)
         if not path:
-            yield None, "请先上传视频/音频文件"
+            yield None, "请先上传视频/音频文件", gr.update(interactive=True), gr.update(interactive=False)
             return
+
+        _transcribe_cancel.reset()
 
         from .transcribe import Transcribe
 
@@ -72,14 +102,30 @@ def create_ui():
                 result["step"] = "正在加载 Whisper 模型（首次需下载，请耐心等待）..."
                 t = Transcribe(args)
 
+                if _transcribe_cancel.cancelled:
+                    result["status"] = "cancelled"
+                    return
+
                 result["step"] = "正在加载音频文件..."
                 audio = utils.load_audio(path, sr=t.sampling_rate)
+
+                if _transcribe_cancel.cancelled:
+                    result["status"] = "cancelled"
+                    return
 
                 result["step"] = "正在检测语音活动 (VAD)..."
                 speech_array_indices = t._detect_voice_activity(audio)
 
+                if _transcribe_cancel.cancelled:
+                    result["status"] = "cancelled"
+                    return
+
                 result["step"] = f"正在转录语音，共 {len(speech_array_indices)} 个片段（此步骤耗时较长）..."
                 transcribe_results = t._transcribe(path, audio, speech_array_indices)
+
+                if _transcribe_cancel.cancelled:
+                    result["status"] = "cancelled"
+                    return
 
                 result["step"] = "正在保存字幕文件..."
                 name, _ = os.path.splitext(path)
@@ -98,19 +144,24 @@ def create_ui():
 
         last_step = None
         while result["status"] == "running":
+            if _transcribe_cancel.cancelled:
+                result["status"] = "cancelled"
+                break
             step = result["step"]
             if step != last_step:
-                yield None, step
+                yield None, step, gr.update(interactive=False), gr.update(interactive=True)
                 last_step = step
             else:
                 elapsed = int(time.time() - _worker_start)
-                yield None, f"{step}  已用时 {elapsed} 秒"
+                yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True)
             time.sleep(2)
 
-        if result["status"] == "error":
-            yield None, f"转录失败: {result['error']}"
+        if result["status"] == "cancelled":
+            yield None, "转录已取消", gr.update(interactive=True), gr.update(interactive=False)
+        elif result["status"] == "error":
+            yield None, f"转录失败: {result['error']}", gr.update(interactive=True), gr.update(interactive=False)
         else:
-            yield result["srt_path"], f"转录完成！已生成 {os.path.basename(result['srt_path'])}"
+            yield result["srt_path"], f"转录完成！已生成 {os.path.basename(result['srt_path'])}", gr.update(interactive=True), gr.update(interactive=False)
 
     # --- Step 3: load & display ---
 
@@ -120,6 +171,16 @@ def create_ui():
             return None, err
         media_path_str = _resolve_media_path(media_path)
 
+        # Auto-detect SRT/JSON next to the media file if not explicitly provided
+        if json_file is None and srt_file is None:
+            base, _ = os.path.splitext(media_path_str)
+            auto_json = base + ".json"
+            auto_srt = base + ".srt"
+            if os.path.exists(auto_json):
+                json_file = auto_json
+            elif os.path.exists(auto_srt):
+                srt_file = auto_srt
+
         if json_file is not None:
             project = load_project(json_file)
         elif srt_file is not None:
@@ -128,7 +189,7 @@ def create_ui():
             else:
                 project = srt_to_project(srt_file, media_path_str)
         else:
-            return None, "请提供 SRT 或 JSON 文件"
+            return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕"
 
         rows = []
         for seg in project["segments"]:
@@ -173,15 +234,28 @@ def create_ui():
 
     # --- Step 4: cut ---
 
+    def _open_directory(path):
+        dirname = os.path.dirname(path)
+        try:
+            if platform.system() == "Windows":
+                os.startfile(dirname)
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", dirname])
+            else:
+                subprocess.Popen(["xdg-open", dirname])
+            return f"已打开文件夹: {dirname}"
+        except Exception as e:
+            return f"打开文件夹失败: {e}"
+
     def run_cut(segments_data, media_path, precise):
         err = _check_file(media_path, "视频/音频文件")
         if err:
-            yield err
+            yield err, gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
             return
         path = _resolve_media_path(media_path)
         segments = _parse_segments(segments_data)
         if not segments:
-            yield "没有可剪辑的片段"
+            yield "没有可剪辑的片段", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
             return
         project: CutProject = {
             "version": "1.0",
@@ -191,8 +265,10 @@ def create_ui():
 
         cut_segs = project_to_segments(project)
         if not cut_segs:
-            yield "没有勾选保留的片段"
+            yield "没有勾选保留的片段", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
             return
+
+        _cut_cancel.reset()
 
         is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
@@ -200,11 +276,15 @@ def create_ui():
 
         total = len(cut_segs)
         try:
-            for i, msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
-                yield msg
-            yield f"剪辑完成！已保存到 {output_fn}（共 {total} 个片段）"
+            for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
+                if _cut_cancel.cancelled:
+                    yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+                    return
+                yield msg, gr.update(interactive=False), gr.update(interactive=True), gr.update(visible=False)
+            yield f"剪辑完成！已保存到 {output_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True)
+            _last_output_path["value"] = output_fn
         except Exception as e:
-            yield f"剪辑失败: {e}"
+            yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
 
     def _cut_with_progress(input_path, output_path, segments, precise, is_video_file):
         from .ffmpeg_cut import _run_ffmpeg
@@ -216,6 +296,8 @@ def create_ui():
             seg_files = []
             total = len(segments)
             for i, seg in enumerate(segments):
+                if _cut_cancel.cancelled:
+                    return
                 duration = seg["end"] - seg["start"]
                 if duration <= 0:
                     continue
@@ -244,6 +326,9 @@ def create_ui():
                 _run_ffmpeg(cmd)
                 seg_files.append(seg_path)
 
+            if _cut_cancel.cancelled:
+                return
+
             # Apply transitions
             has_transitions = any(
                 s.get("transition", "cut") in ("fade", "crossfade") for s in segments
@@ -252,6 +337,9 @@ def create_ui():
                 yield "正在应用转场效果..."
                 from .ffmpeg_cut import _apply_transitions
                 seg_files = _apply_transitions(seg_files, segments, is_video_file, tmpdir)
+
+            if _cut_cancel.cancelled:
+                return
 
             yield "正在合并片段..."
             _concat_segments(seg_files, output_path)
@@ -274,6 +362,8 @@ def create_ui():
         return f"项目已保存到 {json_path}"
 
     # --- Build UI ---
+
+    _last_output_path = {"value": None}
 
     with gr.Blocks(title="AutoCut", theme=gr.themes.Soft()) as app:
         gr.Markdown("# AutoCut - 视频智能剪辑")
@@ -317,7 +407,9 @@ def create_ui():
                         value="auto",
                         label="设备",
                     )
-                transcribe_btn = gr.Button("开始转录", variant="primary")
+                with gr.Row():
+                    transcribe_btn = gr.Button("开始转录", variant="primary")
+                    cancel_transcribe_btn = gr.Button("取消转录", variant="stop", visible=False)
                 transcribe_status = gr.Textbox(label="进度", interactive=False)
                 transcribe_output = gr.File(label="生成的 SRT 文件", interactive=False)
 
@@ -356,15 +448,37 @@ def create_ui():
                 precise_chk = gr.Checkbox(label="帧精确剪切（推荐）", value=True)
             with gr.Row():
                 cut_btn = gr.Button("开始剪辑", variant="primary")
+                cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
                 save_btn = gr.Button("保存项目 JSON")
+                open_dir_btn = gr.Button("打开输出目录", visible=False)
             cut_status = gr.Textbox(label="进度", interactive=False)
 
         # --- Wire up events ---
 
+        def cancel_transcribe():
+            _transcribe_cancel.cancel()
+            return gr.update(interactive=True), gr.update(interactive=False)
+
+        def cancel_cut():
+            _cut_cancel.cancel()
+            return gr.update(interactive=True), gr.update(interactive=False)
+
+        def open_output_dir():
+            path = _last_output_path.get("value")
+            if not path or not os.path.exists(path):
+                return "输出文件不存在"
+            return _open_directory(path)
+
         transcribe_btn.click(
             fn=transcribe_media,
             inputs=[media_input, lang_input, whisper_mode_input, whisper_model_input, device_input],
-            outputs=[transcribe_output, transcribe_status],
+            outputs=[transcribe_output, transcribe_status, transcribe_btn, cancel_transcribe_btn],
+        )
+
+        cancel_transcribe_btn.click(
+            fn=cancel_transcribe,
+            inputs=[],
+            outputs=[transcribe_btn, cancel_transcribe_btn],
         )
 
         load_btn.click(
@@ -376,6 +490,18 @@ def create_ui():
         cut_btn.click(
             fn=run_cut,
             inputs=[segments_df, media_input, precise_chk],
+            outputs=[cut_status, cut_btn, cancel_cut_btn, open_dir_btn],
+        )
+
+        cancel_cut_btn.click(
+            fn=cancel_cut,
+            inputs=[],
+            outputs=[cut_btn, cancel_cut_btn],
+        )
+
+        open_dir_btn.click(
+            fn=open_output_dir,
+            inputs=[],
             outputs=[cut_status],
         )
 
