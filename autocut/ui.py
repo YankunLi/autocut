@@ -411,6 +411,133 @@ def create_ui():
         save_project(project, json_path)
         return f"项目已保存到 {json_path}"
 
+    # --- History ---
+
+    def _scan_history():
+        """Scan for cut projects grouped by source media file.
+
+        Returns a list of dicts: [{source, source_name, cuts: [{video, json, time_str}]}]
+        """
+        import json as json_mod
+
+        history = {}
+        # Look through common media directories — use _last_output_path and
+        # any previously seen media paths. For simplicity, scan the directory
+        # of the currently loaded media if available.
+        search_dirs = set()
+        media_path = _last_output_path.get("value")
+        if media_path and os.path.exists(media_path):
+            search_dirs.add(os.path.dirname(media_path))
+
+        # Also scan directories of all _cut_*.json files we can find
+        # by checking the current working directory
+        search_dirs.add(os.getcwd())
+
+        for search_dir in search_dirs:
+            if not os.path.isdir(search_dir):
+                continue
+            for fname in os.listdir(search_dir):
+                if not fname.endswith(".json") or "_cut_" not in fname:
+                    continue
+                fpath = os.path.join(search_dir, fname)
+                try:
+                    proj = load_project(fpath)
+                except Exception:
+                    continue
+                source = proj.get("source", "")
+                if not source:
+                    continue
+                if source not in history:
+                    history[source] = {
+                        "source": source,
+                        "source_name": os.path.basename(source),
+                        "cuts": [],
+                    }
+                json_base = os.path.splitext(fpath)[0]
+                # Find corresponding video file
+                video_path = None
+                for ext in (".mp4", ".mov", ".mkv", ".avi", ".mp3", ".wav", ".m4a"):
+                    candidate = json_base + ext
+                    if os.path.exists(candidate):
+                        video_path = candidate
+                        break
+                # Extract timestamp from filename like demo_cut_20260713_153045
+                ts_part = fname.replace("_cut_", "|").split("|")[-1].replace(".json", "")
+                time_str = ts_part if ts_part else "?"
+                history[source]["cuts"].append({
+                    "video": video_path or "",
+                    "json": fpath,
+                    "time_str": time_str,
+                })
+
+        # Sort cuts by time within each source
+        for entry in history.values():
+            entry["cuts"].sort(key=lambda c: c["time_str"])
+        return list(history.values())
+
+    def _refresh_history():
+        """Build HTML for the history panel."""
+        records = _scan_history()
+        if not records:
+            return "<p style='color:#888'>暂无剪辑记录</p>"
+
+        html_parts = []
+        for rec in records:
+            source_name = rec["source_name"]
+            source = rec["source"]
+            source_id = str(hash(source))[-8:]
+            html_parts.append(
+                "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
+                "<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                f"<b>{source_name}</b>"
+                f"<button onclick=\"document.querySelector('#del-src-{source_id}').click()\" "
+                "style='color:#e74c3c; background:none; border:none; cursor:pointer; font-size:14px;'>"
+                "删除全部</button>"
+                "</div>"
+            )
+            for cut in rec["cuts"]:
+                video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
+                time_str = cut["time_str"]
+                cut_id = str(hash(cut["json"]))[-8:]
+                html_parts.append(
+                    "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
+                    f"<span>{time_str} - {video_name}</span>"
+                    f"<button onclick=\"document.querySelector('#del-cut-{cut_id}').click()\" "
+                    "style='color:#e67e22; background:none; border:none; cursor:pointer; font-size:13px;'>"
+                    "删除</button>"
+                    "</div>"
+                )
+            html_parts.append("</div>")
+        return "".join(html_parts)
+
+    def _delete_source(source_path):
+        """Delete a source record: remove all associated cut videos and json files."""
+        records = _scan_history()
+        for rec in records:
+            if rec["source"] == source_path:
+                for cut in rec["cuts"]:
+                    if cut["video"] and os.path.exists(cut["video"]):
+                        os.remove(cut["video"])
+                    if os.path.exists(cut["json"]):
+                        os.remove(cut["json"])
+                break
+        return _refresh_history()
+
+    def _delete_cut(json_path):
+        """Delete a single cut result (video + json)."""
+        try:
+            proj = load_project(json_path)
+        except Exception:
+            pass
+        json_base = os.path.splitext(json_path)[0]
+        for ext in (".mp4", ".mov", ".mkv", ".avi", ".mp3", ".wav", ".m4a"):
+            candidate = json_base + ext
+            if os.path.exists(candidate):
+                os.remove(candidate)
+        if os.path.exists(json_path):
+            os.remove(json_path)
+        return _refresh_history()
+
     # --- Build UI ---
 
     _last_output_path = {"value": None}
@@ -513,7 +640,15 @@ def create_ui():
                 # === History Panel ===
                 with gr.Column(visible=False) as history_panel:
                     gr.Markdown("## 历史记录")
-                    gr.Markdown("暂无剪辑记录")
+                    with gr.Row():
+                        refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
+                    history_html = gr.HTML(value=_refresh_history())
+
+                    # Hidden buttons for delete actions triggered from HTML
+                    _del_source_path = gr.Textbox(visible=False)
+                    _del_cut_path = gr.Textbox(visible=False)
+                    _del_source_btn = gr.Button("del-source", visible=False, elem_id="del-source-action")
+                    _del_cut_btn = gr.Button("del-cut", visible=False, elem_id="del-cut-action")
 
         # --- Navigation ---
         def show_cut():
@@ -540,6 +675,19 @@ def create_ui():
             if not path or not os.path.exists(path):
                 return "输出文件不存在"
             return _open_directory(path)
+
+        # History events
+        refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
+
+        _del_source_btn.click(fn=_delete_source, inputs=[_del_source_path], outputs=[history_html])
+        _del_cut_btn.click(fn=_delete_cut, inputs=[_del_cut_path], outputs=[history_html])
+
+        # Also refresh history when switching to history panel
+        nav_history_btn.click(
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True), _refresh_history()),
+            inputs=[],
+            outputs=[cut_panel, history_panel, history_html],
+        )
 
         transcribe_btn.click(
             fn=transcribe_media,
