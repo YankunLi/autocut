@@ -210,7 +210,7 @@ def create_ui():
         elif result["status"] == "error":
             yield None, f"转录失败: {result['error']}", gr.update(interactive=True), gr.update(interactive=False)
         else:
-            yield result["srt_path"], f"转录完成！已生成 {os.path.basename(result['srt_path'])}", gr.update(interactive=True), gr.update(interactive=False)
+            yield result["srt_path"], f"转录完成！已生成 {result['srt_path']}", gr.update(interactive=True), gr.update(interactive=False)
 
     # --- Step 3: load & display ---
 
