@@ -399,10 +399,6 @@ def create_ui():
         meta = {"source": media_path_str, "created": time.strftime("%Y-%m-%d %H:%M:%S")}
         with open(os.path.join(source_dir, ".autocut_meta.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
-        # Copy source media into project dir
-        dest_media = os.path.join(source_dir, os.path.basename(media_path_str))
-        if not os.path.exists(dest_media):
-            shutil.copy2(media_path_str, dest_media)
         # Copy SRT if it exists next to the source
         base, _ = os.path.splitext(media_path_str)
         for ext in (".srt", ".md"):
@@ -412,6 +408,14 @@ def create_ui():
                 if not os.path.exists(dest):
                     shutil.copy2(src, dest)
         return source_dir
+
+    def _ensure_source_copied(source_dir, media_path_str):
+        """Copy source media into project dir if not already there.
+        Called lazily only when needed (e.g. during cut).
+        """
+        dest_media = os.path.join(source_dir, os.path.basename(media_path_str))
+        if not os.path.exists(dest_media):
+            shutil.copy2(media_path_str, dest_media)
 
     def run_cut(segments_data, media_path, precise):
         err = _check_file(media_path, "视频/音频文件")
@@ -444,10 +448,11 @@ def create_ui():
 
         _cut_cancel.reset()
 
-        # Ensure source project dir exists (copy source + srt into workspace)
+        # Ensure source project dir exists and source media is copied
         source_dir = _get_source_dir(path)
         if not source_dir:
             source_dir = _create_source_dir(path)
+        _ensure_source_copied(source_dir, path)
 
         is_video_file = utils.is_video(path.lower())
         outext = "mp4" if is_video_file else "mp3"
