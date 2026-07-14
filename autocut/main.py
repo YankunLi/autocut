@@ -223,7 +223,11 @@ def main():
         app = create_ui()
         from .ui import _get_workspace
         workspace = _get_workspace()
-        app.launch(theme="soft", allowed_paths=[workspace])
+        # Allow the configured workspace plus the default root so that
+        # any future workspace path changes are also covered.
+        default_root = os.path.join(os.path.expanduser("~"), "autocut_workspace")
+        allowed = list({workspace, default_root})
+        app.launch(theme="soft", allowed_paths=allowed)
     else:
         logging.warning("No action, use -c, -t or -d")
 
