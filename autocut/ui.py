@@ -647,7 +647,7 @@ def create_ui():
             # --- Left sidebar navigation ---
             with gr.Column(scale=1, min_width=180):
                 gr.Markdown("# AutoCut")
-                nav_cut_btn = gr.Button("视频剪辑", variant="secondary", size="sm")
+                nav_cut_btn = gr.Button("视频剪辑", variant="primary", size="sm")
                 nav_history_btn = gr.Button("历史记录", variant="secondary", size="sm")
                 nav_config_btn = gr.Button("配置", variant="secondary", size="sm")
 
@@ -766,17 +766,20 @@ def create_ui():
 
         # --- Navigation ---
         def show_cut():
-            return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
+            return (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False),
+                    gr.update(variant="primary"), gr.update(variant="secondary"), gr.update(variant="secondary"))
 
         def show_history():
-            return gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
+            return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
+                    gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"))
 
         def show_config():
-            return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)
+            return (gr.update(visible=False), gr.update(visible=False), gr.update(visible=True),
+                    gr.update(variant="secondary"), gr.update(variant="secondary"), gr.update(variant="primary"))
 
-        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel, config_panel])
-        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel, config_panel])
-        nav_config_btn.click(fn=show_config, inputs=[], outputs=[cut_panel, history_panel, config_panel])
+        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
+        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
+        nav_config_btn.click(fn=show_config, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
 
         # --- Wire up events ---
 
@@ -802,9 +805,11 @@ def create_ui():
 
         # Also refresh history when switching to history panel
         nav_history_btn.click(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), _refresh_history()),
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
+                        gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
+                        _refresh_history()),
             inputs=[],
-            outputs=[cut_panel, history_panel, config_panel, history_html],
+            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html],
         )
 
         transcribe_btn.click(
