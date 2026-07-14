@@ -775,7 +775,7 @@ def create_ui():
                         with gr.Row():
                             cut_btn = gr.Button("开始剪辑", variant="primary")
                             cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
-                            save_btn = gr.Button("保存项目 JSON")
+                            save_btn = gr.Button("保存项目 JSON", visible=False)
                             open_dir_btn = gr.Button("打开输出目录", visible=False)
                         cut_status = gr.Textbox(label="进度", interactive=False)
 
