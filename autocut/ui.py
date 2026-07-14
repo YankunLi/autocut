@@ -261,15 +261,20 @@ def create_ui():
             return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕"
 
         # Build source info string
+        def _display_path(p):
+            if p is None:
+                return None
+            return p if isinstance(p, str) else p.name
+
         source_info = ""
         if json_file is not None:
-            source_info = f"JSON: {json_file}"
+            source_info = f"JSON: {_display_path(json_file)}"
             if md_file is not None:
-                source_info += f"\nMD: {md_file if isinstance(md_file, str) else md_file.name}"
+                source_info += f"\nMD: {_display_path(md_file)}"
         elif srt_file is not None:
-            source_info = f"SRT: {srt_file if isinstance(srt_file, str) else srt_file.name}"
+            source_info = f"SRT: {_display_path(srt_file)}"
             if md_file is not None:
-                source_info += f"\nMD: {md_file if isinstance(md_file, str) else md_file.name}"
+                source_info += f"\nMD: {_display_path(md_file)}"
 
         rows = []
         for seg in project["segments"]:
