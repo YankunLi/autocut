@@ -221,7 +221,7 @@ def main():
         from .ui import create_ui
 
         app = create_ui()
-        app.launch()
+        app.launch(theme="soft")
     else:
         logging.warning("No action, use -c, -t or -d")
 

@@ -642,7 +642,7 @@ def create_ui():
 
     _last_output_path = {"value": None}
 
-    with gr.Blocks(title="AutoCut", theme=gr.themes.Soft()) as app:
+    with gr.Blocks(title="AutoCut") as app:
         with gr.Row():
             # --- Left sidebar navigation ---
             with gr.Column(scale=1, min_width=180):
