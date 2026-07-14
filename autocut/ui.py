@@ -233,11 +233,14 @@ def create_ui():
             source_dir = _get_source_dir(media_path_str)
             if source_dir:
                 for fname in os.listdir(source_dir):
-                    if fname.endswith(".json") and "_cut_" not in fname:
-                        json_file = os.path.join(source_dir, fname)
-                        break
                     if fname.endswith(".srt"):
                         srt_file = os.path.join(source_dir, fname)
+                        break
+                if srt_file is None:
+                    for fname in os.listdir(source_dir):
+                        if fname.endswith(".json") and "_cut_" not in fname:
+                            json_file = os.path.join(source_dir, fname)
+                            break
             if json_file is None and srt_file is None:
                 base, _ = os.path.splitext(media_path_str)
                 auto_json = base + ".json"
