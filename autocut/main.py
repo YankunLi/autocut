@@ -221,7 +221,9 @@ def main():
         from .ui import create_ui
 
         app = create_ui()
-        app.launch(theme="soft")
+        from .ui import _get_workspace
+        workspace = _get_workspace()
+        app.launch(theme="soft", allowed_paths=[workspace])
     else:
         logging.warning("No action, use -c, -t or -d")
 
