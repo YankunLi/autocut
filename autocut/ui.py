@@ -252,6 +252,17 @@ def create_ui():
         else:
             return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕"
 
+        # Build source info string
+        source_info = ""
+        if json_file is not None:
+            source_info = f"JSON: {json_file}"
+            if md_file is not None:
+                source_info += f"\nMD: {md_file if isinstance(md_file, str) else md_file.name}"
+        elif srt_file is not None:
+            source_info = f"SRT: {srt_file if isinstance(srt_file, str) else srt_file.name}"
+            if md_file is not None:
+                source_info += f"\nMD: {md_file if isinstance(md_file, str) else md_file.name}"
+
         rows = []
         for seg in project["segments"]:
             rows.append([
@@ -263,7 +274,7 @@ def create_ui():
                 seg["transition"],
                 seg["transition_duration"],
             ])
-        return rows, f"已加载 {len(project['segments'])} 个片段"
+        return rows, f"已加载 {len(project['segments'])} 个片段\n{source_info}"
 
     def _parse_segments(segments_data):
         if segments_data is None:
