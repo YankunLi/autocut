@@ -177,10 +177,15 @@ def create_ui():
                     return
 
                 result["step"] = "正在保存字幕文件..."
-                name, _ = os.path.splitext(path)
-                srt_path = name + ".srt"
+                # Save SRT/MD to workspace project dir
+                source_dir = _get_source_dir(path)
+                if not source_dir:
+                    source_dir = _create_source_dir(path)
+                source_name = os.path.splitext(os.path.basename(path))[0]
+                srt_path = os.path.join(source_dir, source_name + ".srt")
+                md_path = os.path.join(source_dir, source_name + ".md")
                 t._save_srt(srt_path, transcribe_results)
-                t._save_md(name + ".md", srt_path, path)
+                t._save_md(md_path, srt_path, path)
                 result["status"] = "done"
                 result["srt_path"] = srt_path
             except Exception as e:
