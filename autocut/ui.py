@@ -220,15 +220,27 @@ def create_ui():
             return None, err
         media_path_str = _resolve_media_path(media_path)
 
-        # Auto-detect SRT/JSON next to the media file if not explicitly provided
-        if json_file is None and srt_file is None:
-            base, _ = os.path.splitext(media_path_str)
-            auto_json = base + ".json"
-            auto_srt = base + ".srt"
-            if os.path.exists(auto_json):
-                json_file = auto_json
-            elif os.path.exists(auto_srt):
-                srt_file = auto_srt
+        # If user explicitly provided files, use them directly
+        user_provided = json_file is not None or srt_file is not None
+
+        if not user_provided:
+            # Auto-detect: first check workspace project dir, then next to media
+            source_dir = _get_source_dir(media_path_str)
+            if source_dir:
+                for fname in os.listdir(source_dir):
+                    if fname.endswith(".json") and "_cut_" not in fname:
+                        json_file = os.path.join(source_dir, fname)
+                        break
+                    if fname.endswith(".srt"):
+                        srt_file = os.path.join(source_dir, fname)
+            if json_file is None and srt_file is None:
+                base, _ = os.path.splitext(media_path_str)
+                auto_json = base + ".json"
+                auto_srt = base + ".srt"
+                if os.path.exists(auto_json):
+                    json_file = auto_json
+                elif os.path.exists(auto_srt):
+                    srt_file = auto_srt
 
         if json_file is not None:
             project = load_project(json_file)
