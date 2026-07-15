@@ -791,6 +791,8 @@ def create_ui():
                     _del_target = gr.Dropdown(
                         label="选择要删除的项目",
                         choices=_get_history_choices(),
+                        interactive=True,
+                        allow_custom_value=True,
                     )
                     with gr.Row():
                         _del_btn = gr.Button("删除选中", variant="stop")
@@ -847,7 +849,6 @@ def create_ui():
 
         _del_btn.click(fn=_delete_item, inputs=[_del_target], outputs=[history_html, _del_target, _del_status])
 
-        # Also refresh history when switching to history panel
         nav_history_btn.click(
             fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
                         gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
