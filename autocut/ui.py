@@ -638,70 +638,75 @@ def create_ui():
             return "<p style='color:#888'>暂无剪辑记录</p>"
 
         html_parts = []
+        idx = 0
         for rec in records:
             source_dirname = rec["source_dirname"]
             source_name = rec["source_name"]
             created = rec["created"]
-            source_dir = rec["source_dir"]
             html_parts.append(
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
-                f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                "<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<div><b>{source_dirname}</b><br><span style='color:#666; font-size:12px;'>{source_name} &nbsp; {created}</span></div>"
-                f"<span style='color:#e74c3c; font-size:12px; cursor:pointer;' data-del-source='{source_dir}'>复制路径删除全部</span>"
+                f"<span style='color:#888; font-size:12px;'>#{idx}</span>"
                 "</div>"
             )
+            idx += 1
             for cut in rec["cuts"]:
                 video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
                 cut_dirname = cut["cut_dirname"]
-                cut_dir = cut["cut_dir"]
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
                     f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
-                    f"<span style='color:#e67e22; font-size:12px; cursor:pointer;' data-del-cut='{cut_dir}'>复制路径删除</span>"
+                    f"<span style='color:#888; font-size:12px;'>#{idx}</span>"
                     "</div>"
                 )
+                idx += 1
             html_parts.append("</div>")
         return "".join(html_parts)
 
-    def _get_history_choices():
-        """Return dropdown choices (labels only) and a mapping from label to path."""
+    def _get_history_items():
+        """Return ordered list of (label, dir_path, video_path) for all history items."""
         records = _scan_history()
-        choices = []
+        items = []
         for rec in records:
-            source_dirname = rec["source_dirname"]
             source_dir = rec["source_dir"]
-            choices.append(f"[源] {source_dirname} (删除全部)")
-            for cut in rec["cuts"]:
-                cut_dirname = cut["cut_dirname"]
-                choices.append(f"  └ [剪辑] {cut_dirname}")
-        return choices
-
-    def _get_choice_to_path_map():
-        """Return mapping from dropdown label to actual directory path."""
-        records = _scan_history()
-        mapping = {}
-        for rec in records:
             source_dirname = rec["source_dirname"]
-            source_dir = rec["source_dir"]
-            mapping[f"[源] {source_dirname} (删除全部)"] = source_dir
+            items.append((f"[源] {source_dirname} (删除全部)", source_dir, ""))
             for cut in rec["cuts"]:
                 cut_dir = cut["cut_dir"]
                 cut_dirname = cut["cut_dirname"]
-                mapping[f"  └ [剪辑] {cut_dirname}"] = cut_dir
-        return mapping
+                video = cut["video"] or ""
+                items.append((f"[剪辑] {cut_dirname}", cut_dir, video))
+        return items
 
-    def _delete_item(selected_label):
-        """Delete a source or cut directory based on dropdown selection."""
-        mapping = _get_choice_to_path_map()
-        target_path = mapping.get(selected_label, "")
-        if not target_path or not os.path.isdir(target_path):
-            return _refresh_history(), gr.update(choices=_get_history_choices(), value=None), "路径无效或已删除"
+    def _delete_item(idx_str):
+        """Delete a history item by index."""
+        items = _get_history_items()
+        try:
+            idx = int(idx_str)
+        except (ValueError, TypeError):
+            return _refresh_history(), "无效的索引"
+        if idx < 0 or idx >= len(items):
+            return _refresh_history(), "索引超出范围"
+        target_path = items[idx][1]
+        if not os.path.isdir(target_path):
+            return _refresh_history(), "路径已不存在"
         shutil.rmtree(target_path)
-        return _refresh_history(), gr.update(choices=_get_history_choices(), value=None), "已删除"
+        return _refresh_history(), "已删除"
 
-    def _refresh_all():
-        """Refresh history display and dropdown choices."""
-        return _refresh_history(), gr.update(choices=_get_history_choices(), value=None), ""
+    def _view_item(idx_str):
+        """Open the video file for a history item by index."""
+        items = _get_history_items()
+        try:
+            idx = int(idx_str)
+        except (ValueError, TypeError):
+            return "无效的索引"
+        if idx < 0 or idx >= len(items):
+            return "索引超出范围"
+        video_path = items[idx][2]
+        if not video_path or not os.path.exists(video_path):
+            return "视频文件不存在"
+        return _open_directory(video_path)
 
     # --- Build UI ---
 
@@ -809,14 +814,11 @@ def create_ui():
                     with gr.Row():
                         refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
                     history_html = gr.HTML(value=_refresh_history())
-                    _del_target = gr.Dropdown(
-                        label="选择要删除的项目",
-                        choices=_get_history_choices(),
-                        interactive=True,
-                    )
                     with gr.Row():
-                        _del_btn = gr.Button("删除选中", variant="stop")
-                    _del_status = gr.Textbox(label="", interactive=False)
+                        _hist_idx = gr.Number(label="编号 #", value=0, precision=0, minimum=0)
+                        _del_btn = gr.Button("删除", variant="stop", size="sm")
+                        _view_btn = gr.Button("查看", variant="secondary", size="sm")
+                    _hist_status = gr.Textbox(label="", interactive=False)
 
                 # === Config Panel ===
                 with gr.Column(visible=False) as config_panel:
@@ -851,9 +853,9 @@ def create_ui():
         nav_history_btn.click(
             fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
                         gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
-                        _refresh_history(), gr.update(choices=_get_history_choices(), value=None), ""),
+                        _refresh_history()),
             inputs=[],
-            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html, _del_target, _del_status],
+            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html],
         )
 
         # --- Wire up events ---
@@ -873,9 +875,10 @@ def create_ui():
             return _open_directory(path)
 
         # History events
-        refresh_history_btn.click(fn=_refresh_all, inputs=[], outputs=[history_html, _del_target, _del_status])
+        refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
 
-        _del_btn.click(fn=_delete_item, inputs=[_del_target], outputs=[history_html, _del_target, _del_status])
+        _del_btn.click(fn=_delete_item, inputs=[_hist_idx], outputs=[history_html, _hist_status])
+        _view_btn.click(fn=_view_item, inputs=[_hist_idx], outputs=[_hist_status])
 
         transcribe_btn.click(
             fn=transcribe_media,
