@@ -632,7 +632,7 @@ def create_ui():
         return history
 
     def _refresh_history():
-        """Build HTML for the history panel (display-only, no onclick)."""
+        """Build HTML for the history panel (display-only)."""
         records = _scan_history()
         if not records:
             return "<p style='color:#888'>暂无剪辑记录</p>"
@@ -642,37 +642,58 @@ def create_ui():
             source_dirname = rec["source_dirname"]
             source_name = rec["source_name"]
             created = rec["created"]
+            source_dir = rec["source_dir"]
             html_parts.append(
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
+                f"<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<div><b>{source_dirname}</b><br><span style='color:#666; font-size:12px;'>{source_name} &nbsp; {created}</span></div>"
+                f"<span style='color:#e74c3c; font-size:12px; cursor:pointer;' data-del-source='{source_dir}'>复制路径删除全部</span>"
+                "</div>"
             )
             for cut in rec["cuts"]:
                 video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
                 cut_dirname = cut["cut_dirname"]
+                cut_dir = cut["cut_dir"]
                 html_parts.append(
-                    "<div style='margin:6px 0 6px 12px;'>"
-                    f"<b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span>"
+                    "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
+                    f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
+                    f"<span style='color:#e67e22; font-size:12px; cursor:pointer;' data-del-cut='{cut_dir}'>复制路径删除</span>"
                     "</div>"
                 )
             html_parts.append("</div>")
         return "".join(html_parts)
 
     def _get_history_choices():
-        """Return dropdown choices for delete selection."""
+        """Return dropdown choices (labels only) and a mapping from label to path."""
         records = _scan_history()
         choices = []
         for rec in records:
             source_dirname = rec["source_dirname"]
             source_dir = rec["source_dir"]
-            choices.append((f"[源] {source_dirname} (删除全部)", source_dir))
+            choices.append(f"[源] {source_dirname} (删除全部)")
+            for cut in rec["cuts"]:
+                cut_dirname = cut["cut_dirname"]
+                choices.append(f"  └ [剪辑] {cut_dirname}")
+        return choices
+
+    def _get_choice_to_path_map():
+        """Return mapping from dropdown label to actual directory path."""
+        records = _scan_history()
+        mapping = {}
+        for rec in records:
+            source_dirname = rec["source_dirname"]
+            source_dir = rec["source_dir"]
+            mapping[f"[源] {source_dirname} (删除全部)"] = source_dir
             for cut in rec["cuts"]:
                 cut_dir = cut["cut_dir"]
                 cut_dirname = cut["cut_dirname"]
-                choices.append((f"  └ [剪辑] {cut_dirname}", cut_dir))
-        return choices
+                mapping[f"  └ [剪辑] {cut_dirname}"] = cut_dir
+        return mapping
 
-    def _delete_item(target_path):
-        """Delete a source or cut directory."""
+    def _delete_item(selected_label):
+        """Delete a source or cut directory based on dropdown selection."""
+        mapping = _get_choice_to_path_map()
+        target_path = mapping.get(selected_label, "")
         if not target_path or not os.path.isdir(target_path):
             return _refresh_history(), gr.update(choices=_get_history_choices(), value=None), "路径无效或已删除"
         shutil.rmtree(target_path)
@@ -792,7 +813,6 @@ def create_ui():
                         label="选择要删除的项目",
                         choices=_get_history_choices(),
                         interactive=True,
-                        allow_custom_value=True,
                     )
                     with gr.Row():
                         _del_btn = gr.Button("删除选中", variant="stop")
@@ -825,8 +845,16 @@ def create_ui():
                     gr.update(variant="secondary"), gr.update(variant="secondary"), gr.update(variant="primary"))
 
         nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
-        nav_history_btn.click(fn=show_history, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
         nav_config_btn.click(fn=show_config, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
+
+        # History panel: also refresh when switching to it
+        nav_history_btn.click(
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
+                        gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
+                        _refresh_history(), gr.update(choices=_get_history_choices(), value=None), ""),
+            inputs=[],
+            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html, _del_target, _del_status],
+        )
 
         # --- Wire up events ---
 
@@ -848,14 +876,6 @@ def create_ui():
         refresh_history_btn.click(fn=_refresh_all, inputs=[], outputs=[history_html, _del_target, _del_status])
 
         _del_btn.click(fn=_delete_item, inputs=[_del_target], outputs=[history_html, _del_target, _del_status])
-
-        nav_history_btn.click(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
-                        gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
-                        *_refresh_all()),
-            inputs=[],
-            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html, _del_target, _del_status],
-        )
 
         transcribe_btn.click(
             fn=transcribe_media,
