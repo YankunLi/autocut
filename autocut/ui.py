@@ -632,7 +632,7 @@ def create_ui():
         return history
 
     def _refresh_history():
-        """Build HTML for the history panel (display-only)."""
+        """Build HTML for the history panel with inline delete/view buttons."""
         records = _scan_history()
         if not records:
             return "<p style='color:#888'>暂无剪辑记录</p>"
@@ -647,17 +647,21 @@ def create_ui():
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
                 "<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<div><b>{source_dirname}</b><br><span style='color:#666; font-size:12px;'>{source_name} &nbsp; {created}</span></div>"
-                f"<span style='color:#888; font-size:12px;'>#{idx}</span>"
+                f"<button onclick=\"_autocut_del({idx})\" style='color:#e74c3c; background:none; border:1px solid #e74c3c; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除全部</button>"
                 "</div>"
             )
             idx += 1
             for cut in rec["cuts"]:
                 video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
                 cut_dirname = cut["cut_dirname"]
+                has_video = "true" if cut["video"] else "false"
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
                     f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
-                    f"<span style='color:#888; font-size:12px;'>#{idx}</span>"
+                    f"<div style='display:flex; gap:4px;'>"
+                    f"<button onclick=\"_autocut_view({idx})\" style='color:#3498db; background:none; border:1px solid #3498db; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>查看</button>"
+                    f"<button onclick=\"_autocut_del({idx})\" style='color:#e67e22; background:none; border:1px solid #e67e22; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除</button>"
+                    "</div>"
                     "</div>"
                 )
                 idx += 1
@@ -679,11 +683,11 @@ def create_ui():
                 items.append((f"[剪辑] {cut_dirname}", cut_dir, video))
         return items
 
-    def _delete_item(idx_str):
+    def _delete_item(idx_val):
         """Delete a history item by index."""
         items = _get_history_items()
         try:
-            idx = int(idx_str)
+            idx = int(idx_val)
         except (ValueError, TypeError):
             return _refresh_history(), "无效的索引"
         if idx < 0 or idx >= len(items):
@@ -694,11 +698,11 @@ def create_ui():
         shutil.rmtree(target_path)
         return _refresh_history(), "已删除"
 
-    def _view_item(idx_str):
+    def _view_item(idx_val):
         """Open the video file for a history item by index."""
         items = _get_history_items()
         try:
-            idx = int(idx_str)
+            idx = int(idx_val)
         except (ValueError, TypeError):
             return "无效的索引"
         if idx < 0 or idx >= len(items):
@@ -814,11 +818,12 @@ def create_ui():
                     with gr.Row():
                         refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
                     history_html = gr.HTML(value=_refresh_history())
-                    with gr.Row():
-                        _hist_idx = gr.Number(label="编号 #", value=0, precision=0, minimum=0)
-                        _del_btn = gr.Button("删除", variant="stop", size="sm")
-                        _view_btn = gr.Button("查看", variant="secondary", size="sm")
                     _hist_status = gr.Textbox(label="", interactive=False)
+                    # Hidden components for JS bridge
+                    _hist_del_idx = gr.Number(visible=False, value=-1, precision=0, elem_id="hist-del-idx")
+                    _hist_view_idx = gr.Number(visible=False, value=-1, precision=0, elem_id="hist-view-idx")
+                    _hist_del_action = gr.Button(visible=False, elem_id="hist-del-action")
+                    _hist_view_action = gr.Button(visible=False, elem_id="hist-view-action")
 
                 # === Config Panel ===
                 with gr.Column(visible=False) as config_panel:
@@ -877,8 +882,8 @@ def create_ui():
         # History events
         refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
 
-        _del_btn.click(fn=_delete_item, inputs=[_hist_idx], outputs=[history_html, _hist_status])
-        _view_btn.click(fn=_view_item, inputs=[_hist_idx], outputs=[_hist_status])
+        _hist_del_action.click(fn=_delete_item, inputs=[_hist_del_idx], outputs=[history_html, _hist_status])
+        _hist_view_action.click(fn=_view_item, inputs=[_hist_view_idx], outputs=[_hist_status])
 
         transcribe_btn.click(
             fn=transcribe_media,
@@ -942,3 +947,17 @@ def create_ui():
         open_workspace_btn.click(fn=open_workspace, inputs=[], outputs=[workspace_status])
 
     return app
+
+
+_BRIDGE_JS = """<script>
+function _autocut_del(idx){
+    var inp=document.querySelector('#hist-del-idx input');
+    inp.value=idx;inp.dispatchEvent(new Event('input',{bubbles:true}));
+    setTimeout(function(){document.querySelector('#hist-del-action button').click()},100);
+}
+function _autocut_view(idx){
+    var inp=document.querySelector('#hist-view-idx input');
+    inp.value=idx;inp.dispatchEvent(new Event('input',{bubbles:true}));
+    setTimeout(function(){document.querySelector('#hist-view-action button').click()},100);
+}
+</script>"""

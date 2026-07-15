@@ -218,7 +218,7 @@ def main():
     elif args.s:
         utils.compact_rst(args.inputs[0], args.encoding)
     elif args.ui:
-        from .ui import create_ui
+        from .ui import create_ui, _BRIDGE_JS
 
         app = create_ui()
         from .ui import _get_workspace
@@ -227,7 +227,7 @@ def main():
         # any future workspace path changes are also covered.
         default_root = os.path.join(os.path.expanduser("~"), "autocut_workspace")
         allowed = list({workspace, default_root})
-        app.launch(theme="soft", allowed_paths=allowed)
+        app.launch(theme="soft", allowed_paths=allowed, head=_BRIDGE_JS)
     else:
         logging.warning("No action, use -c, -t or -d")
 
