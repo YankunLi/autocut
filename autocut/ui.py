@@ -713,13 +713,13 @@ def create_ui():
         try:
             idx = int(idx_val)
         except (ValueError, TypeError):
-            return "无效的索引"
+            return _refresh_history(), "无效的索引"
         if idx < 0 or idx >= len(items):
-            return "索引超出范围"
+            return _refresh_history(), "索引超出范围"
         video_path = items[idx][2]
         if not video_path or not os.path.exists(video_path):
-            return "视频文件不存在"
-        return _open_directory(video_path)
+            return _refresh_history(), "视频文件不存在"
+        return _refresh_history(), _open_directory(video_path)
 
     # --- Build UI ---
 
@@ -826,13 +826,8 @@ def create_ui():
                     gr.Markdown("## 历史记录")
                     with gr.Row():
                         refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
-                    history_html = gr.HTML(value=_refresh_history())
+                    history_html = gr.HTML(value=_refresh_history(), elem_classes="history-html")
                     _hist_status = gr.Textbox(label="", interactive=False)
-                    # Hidden components for JS bridge
-                    _hist_del_idx = gr.Number(visible=False, value=-1, precision=0, elem_id="hist-del-idx")
-                    _hist_view_idx = gr.Number(visible=False, value=-1, precision=0, elem_id="hist-view-idx")
-                    _hist_del_action = gr.Button(visible=False, elem_id="hist-del-action")
-                    _hist_view_action = gr.Button(visible=False, elem_id="hist-view-action")
 
                 # === Config Panel ===
                 with gr.Column(visible=False) as config_panel:
@@ -891,8 +886,11 @@ def create_ui():
         # History events
         refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
 
-        _hist_del_action.click(fn=_delete_item, inputs=[_hist_del_idx], outputs=[history_html, _hist_status])
-        _hist_view_action.click(fn=_view_item, inputs=[_hist_view_idx], outputs=[_hist_status])
+        # Register delete/view as API endpoints callable from JS
+        _del_endpoint = gr.Button(visible=False)
+        _del_endpoint.click(fn=_delete_item, inputs=[gr.Number(visible=False)], outputs=[history_html, _hist_status], api_name="_delete_item")
+        _view_endpoint = gr.Button(visible=False)
+        _view_endpoint.click(fn=_view_item, inputs=[gr.Number(visible=False)], outputs=[history_html, _hist_status], api_name="_view_item")
 
         transcribe_btn.click(
             fn=transcribe_media,
@@ -959,14 +957,27 @@ def create_ui():
 
 
 _BRIDGE_JS = """<script>
-function _autocut_del(idx){
-    var inp=document.querySelector('#hist-del-idx input');
-    inp.value=idx;inp.dispatchEvent(new Event('input',{bubbles:true}));
-    setTimeout(function(){document.querySelector('#hist-del-action button').click()},100);
+function _autocut_api(api_name, idx){
+    var cfg=window.gradio_config;
+    var root=cfg?cfg.root:'';
+    fetch(root+'gradio_api/call/'+api_name,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({data:[idx]})
+    }).then(function(r){return r.json()}).then(function(d){
+        fetch(root+'gradio_api/call/'+api_name+'/'+d.event_id).then(function(r){return r.text()}).then(function(t){
+            var lines=t.split('\\n');
+            for(var i=0;i<lines.length;i++){
+                if(lines[i].startsWith('data: ')){
+                    var data=JSON.parse(lines[i].slice(6));
+                    var htmlEl=document.querySelector('.history-html');
+                    if(htmlEl) htmlEl.innerHTML=data[0];
+                    break;
+                }
+            }
+        });
+    });
 }
-function _autocut_view(idx){
-    var inp=document.querySelector('#hist-view-idx input');
-    inp.value=idx;inp.dispatchEvent(new Event('input',{bubbles:true}));
-    setTimeout(function(){document.querySelector('#hist-view-action button').click()},100);
-}
+function _autocut_del(idx){_autocut_api('_delete_item',idx)}
+function _autocut_view(idx){_autocut_api('_view_item',idx)}
 </script>"""
