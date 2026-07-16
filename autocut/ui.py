@@ -144,7 +144,12 @@ def create_ui():
         args.vad = "auto"
         args.device = device if device != "auto" else None
 
-        result = {"status": "running", "srt_path": None, "error": None, "step": "初始化..."}
+        result = {"status": "running", "srt_path": None, "error": None, "step": "初始化...", "segment_done": 0, "segment_total": 0}
+
+        def _on_transcribe_progress(done, total):
+            result["segment_done"] = done
+            result["segment_total"] = total
+            result["step"] = f"正在转录语音 {done}/{total} 个片段..."
 
         def _worker():
             try:
@@ -170,7 +175,8 @@ def create_ui():
                     return
 
                 result["step"] = f"正在转录语音，共 {len(speech_array_indices)} 个片段（此步骤耗时较长）..."
-                transcribe_results = t._transcribe(path, audio, speech_array_indices)
+                result["segment_total"] = len(speech_array_indices)
+                transcribe_results = t._transcribe(path, audio, speech_array_indices, progress_callback=_on_transcribe_progress)
 
                 if _transcribe_cancel.cancelled:
                     result["status"] = "cancelled"
@@ -202,11 +208,14 @@ def create_ui():
                 result["status"] = "cancelled"
                 break
             step = result["step"]
+            elapsed = int(time.time() - _worker_start)
             if step != last_step:
-                yield None, step, gr.update(interactive=False), gr.update(interactive=True)
+                if result["segment_total"] > 0:
+                    yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True)
+                else:
+                    yield None, step, gr.update(interactive=False), gr.update(interactive=True)
                 last_step = step
             else:
-                elapsed = int(time.time() - _worker_start)
                 yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True)
             time.sleep(2)
 

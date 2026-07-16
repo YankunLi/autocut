@@ -73,12 +73,16 @@ class WhisperModel(AbstractWhisperModel):
         speech_array_indices: List[SPEECH_ARRAY_INDEX],
         lang: LANG,
         prompt: str,
+        progress_callback=None,
     ):
         res = []
-        if self.device == "cpu" and len(speech_array_indices) > 1:
+        total = len(speech_array_indices)
+        if self.device == "cpu" and total > 1:
+            from itertools import count
             from multiprocessing import Pool
 
-            pbar = tqdm(total=len(speech_array_indices))
+            pbar = tqdm(total=total)
+            completed = count(1)
 
             pool = Pool(processes=4)
             sub_res = []
@@ -94,7 +98,10 @@ class WhisperModel(AbstractWhisperModel):
                             lang,
                             prompt,
                         ),
-                        callback=lambda x: pbar.update(),
+                        callback=lambda x: (
+                            pbar.update(),
+                            progress_callback(next(completed), total) if progress_callback else None,
+                        ),
                     )
                 )
             pool.close()
@@ -102,9 +109,9 @@ class WhisperModel(AbstractWhisperModel):
             pbar.close()
             res = [i.get() for i in sub_res]
         else:
-            for seg in (
+            for i, seg in enumerate(
                 speech_array_indices
-                if len(speech_array_indices) == 1
+                if total == 1
                 else tqdm(speech_array_indices)
             ):
                 r = self.whisper_model.transcribe(
@@ -112,10 +119,12 @@ class WhisperModel(AbstractWhisperModel):
                     task="transcribe",
                     language=lang,
                     initial_prompt=prompt,
-                    verbose=False if len(speech_array_indices) == 1 else None,
+                    verbose=False if total == 1 else None,
                 )
                 r["origin_timestamp"] = seg
                 res.append(r)
+                if progress_callback:
+                    progress_callback(i + 1, total)
         return res
 
     def gen_srt(self, transcribe_results):
@@ -185,6 +194,7 @@ class OpenAIModel(AbstractWhisperModel):
         speech_array_indices: List[SPEECH_ARRAY_INDEX],
         lang: LANG,
         prompt: str,
+        progress_callback=None,
     ) -> List[srt.Subtitle]:
         res = []
         name, _ = os.path.splitext(input)
@@ -232,9 +242,12 @@ class OpenAIModel(AbstractWhisperModel):
             i += 1
 
         if len(audios) > 1:
+            from itertools import count
             from multiprocessing import Pool
 
             pbar = tqdm(total=len(audios))
+            completed = count(1)
+            total = len(audios)
 
             pool = Pool(processes=min(8, self.rpm))
             sub_res = []
@@ -249,7 +262,10 @@ class OpenAIModel(AbstractWhisperModel):
                             lang,
                             audio["start_ms"],
                         ),
-                        callback=lambda x: pbar.update(),
+                        callback=lambda x: (
+                            pbar.update(),
+                            progress_callback(next(completed), total) if progress_callback else None,
+                        ),
                     )
                 )
             pool.close()
@@ -266,6 +282,8 @@ class OpenAIModel(AbstractWhisperModel):
                 lang,
                 audios[0]["start_ms"],
             )
+            if progress_callback:
+                progress_callback(1, 1)
 
         return res
 
@@ -343,9 +361,11 @@ class FasterWhisperModel(AbstractWhisperModel):
         speech_array_indices: List[SPEECH_ARRAY_INDEX],
         lang: LANG,
         prompt: str,
+        progress_callback=None,
     ):
         res = []
-        for seg in speech_array_indices:
+        total = len(speech_array_indices)
+        for i, seg in enumerate(speech_array_indices):
             segments, info = self.whisper_model.transcribe(
                 audio[int(seg["start"]) : int(seg["end"])],
                 task="transcribe",
@@ -356,6 +376,8 @@ class FasterWhisperModel(AbstractWhisperModel):
             segments = list(segments)  # The transcription will actually run here.
             r = {"origin_timestamp": seg, "segments": segments, "info": info}
             res.append(r)
+            if progress_callback:
+                progress_callback(i + 1, total)
         return res
 
     def gen_srt(self, transcribe_results):

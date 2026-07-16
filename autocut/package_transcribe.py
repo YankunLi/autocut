@@ -40,9 +40,9 @@ class Transcribe:
                 self.whisper_model.load(self.whisper_model_size, self.device)
         logging.info(f"Done Init model in {time.time() - tic:.1f} sec")
 
-    def run(self, audio: np.ndarray, lang: LANG, prompt: str = ""):
+    def run(self, audio: np.ndarray, lang: LANG, prompt: str = "", progress_callback=None):
         speech_array_indices = self._detect_voice_activity(audio)
-        transcribe_results = self._transcribe(audio, speech_array_indices, lang, prompt)
+        transcribe_results = self._transcribe(audio, speech_array_indices, lang, prompt, progress_callback=progress_callback)
         return transcribe_results
 
     def format_results_to_srt(self, transcribe_results: List[Any]):
@@ -87,8 +87,9 @@ class Transcribe:
         speech_array_indices: List[SPEECH_ARRAY_INDEX],
         lang: LANG,
         prompt: str = "",
+        progress_callback=None,
     ) -> List[Any]:
         tic = time.time()
-        res = self.whisper_model.transcribe(audio, speech_array_indices, lang, prompt)
+        res = self.whisper_model.transcribe(audio, speech_array_indices, lang, prompt, progress_callback=progress_callback)
         logging.info(f"Done transcription in {time.time() - tic:.1f} sec")
         return res
