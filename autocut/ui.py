@@ -656,20 +656,19 @@ def create_ui():
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
                 "<div style='display:flex; justify-content:space-between; align-items:center;'>"
                 f"<div><b>{source_dirname}</b><br><span style='color:#666; font-size:12px;'>{source_name} &nbsp; {created}</span></div>"
-                f"<button onclick=\"_autocut_del({idx})\" style='color:#e74c3c; background:none; border:1px solid #e74c3c; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除全部</button>"
+                f"<button data-action='del' data-idx='{idx}' style='color:#e74c3c; background:none; border:1px solid #e74c3c; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除全部</button>"
                 "</div>"
             )
             idx += 1
             for cut in rec["cuts"]:
                 video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
                 cut_dirname = cut["cut_dirname"]
-                has_video = "true" if cut["video"] else "false"
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
                     f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
                     f"<div style='display:flex; gap:4px;'>"
-                    f"<button onclick=\"_autocut_view({idx})\" style='color:#3498db; background:none; border:1px solid #3498db; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>查看</button>"
-                    f"<button onclick=\"_autocut_del({idx})\" style='color:#e67e22; background:none; border:1px solid #e67e22; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除</button>"
+                    f"<button data-action='view' data-idx='{idx}' style='color:#3498db; background:none; border:1px solid #3498db; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>查看</button>"
+                    f"<button data-action='del' data-idx='{idx}' style='color:#e67e22; background:none; border:1px solid #e67e22; border-radius:4px; cursor:pointer; font-size:12px; padding:2px 8px;'>删除</button>"
                     "</div>"
                     "</div>"
                 )
@@ -719,7 +718,8 @@ def create_ui():
         video_path = items[idx][2]
         if not video_path or not os.path.exists(video_path):
             return _refresh_history(), "视频文件不存在"
-        return _refresh_history(), _open_directory(video_path)
+        _open_directory(video_path)
+        return _refresh_history(), "已打开文件夹"
 
     # --- Build UI ---
 
@@ -826,7 +826,27 @@ def create_ui():
                     gr.Markdown("## 历史记录")
                     with gr.Row():
                         refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
-                    history_html = gr.HTML(value=_refresh_history(), elem_classes="history-html")
+                    history_html = gr.HTML(
+                        value=_refresh_history(),
+                        elem_classes="history-html",
+                        js_on_load="""function attachListeners(){
+                            element.querySelectorAll('[data-action]').forEach(function(btn){
+                                btn.addEventListener('click', function(){
+                                    var action=this.getAttribute('data-action');
+                                    var idx=parseInt(this.getAttribute('data-idx'));
+                                    if(isNaN(idx)) return;
+                                    if(action==='del'){
+                                        server._delete_item(idx).then(function(r){ props.value=r[0]; });
+                                    } else if(action==='view'){
+                                        server._view_item(idx).then(function(r){ props.value=r[0]; });
+                                    }
+                                });
+                            });
+                        }
+                        attachListeners();
+                        watch('value', attachListeners);""",
+                        server_functions=[_delete_item, _view_item],
+                    )
                     _hist_status = gr.Textbox(label="", interactive=False)
 
                 # === Config Panel ===
@@ -886,11 +906,7 @@ def create_ui():
         # History events
         refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
 
-        # Register delete/view as API endpoints callable from JS
-        _del_endpoint = gr.Button(visible=False)
-        _del_endpoint.click(fn=_delete_item, inputs=[gr.Number(visible=False)], outputs=[history_html, _hist_status], api_name="_delete_item")
-        _view_endpoint = gr.Button(visible=False)
-        _view_endpoint.click(fn=_view_item, inputs=[gr.Number(visible=False)], outputs=[history_html, _hist_status], api_name="_view_item")
+        # Remove unused hidden endpoints - the HTML component's server_functions handle it now
 
         transcribe_btn.click(
             fn=transcribe_media,
@@ -956,28 +972,4 @@ def create_ui():
     return app
 
 
-_BRIDGE_JS = """<script>
-function _autocut_api(api_name, idx){
-    var cfg=window.gradio_config;
-    var root=cfg?cfg.root:'';
-    fetch(root+'gradio_api/call/'+api_name,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({data:[idx]})
-    }).then(function(r){return r.json()}).then(function(d){
-        fetch(root+'gradio_api/call/'+api_name+'/'+d.event_id).then(function(r){return r.text()}).then(function(t){
-            var lines=t.split('\\n');
-            for(var i=0;i<lines.length;i++){
-                if(lines[i].startsWith('data: ')){
-                    var data=JSON.parse(lines[i].slice(6));
-                    var htmlEl=document.querySelector('.history-html');
-                    if(htmlEl) htmlEl.innerHTML=data[0];
-                    break;
-                }
-            }
-        });
-    });
-}
-function _autocut_del(idx){_autocut_api('_delete_item',idx)}
-function _autocut_view(idx){_autocut_api('_view_item',idx)}
-</script>"""
+_BRIDGE_JS = ""
