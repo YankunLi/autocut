@@ -800,6 +800,18 @@ def create_ui():
                             interactive=True,
                             label="片段列表",
                         )
+                        _selected_row = gr.State(-1)
+                        with gr.Row():
+                            transition_dd = gr.Dropdown(
+                                choices=["cut", "fade", "crossfade"],
+                                value="cut",
+                                label="转场类型",
+                                scale=4,
+                                info="在表格中点选一行，再点应用",
+                            )
+                            apply_transition_btn = gr.Button("应用到选中行", scale=1)
+                            apply_all_transition_btn = gr.Button("应用到所有", scale=1)
+                        transition_status = gr.Textbox(label="转场操作结果", interactive=False)
 
                         with gr.Accordion("转场类型说明", open=False):
                             gr.Markdown(
@@ -924,6 +936,61 @@ def create_ui():
             fn=load_segments,
             inputs=[media_input, srt_input, json_input, md_input],
             outputs=[segments_df, cut_status],
+        )
+
+        def _on_segment_select(evt: gr.SelectData):
+            """Store selected row index and populate dropdown with that row's transition."""
+            row_idx = evt.index[0]
+            row_val = evt.row_value
+            transition_val = row_val[5] if row_val and len(row_val) > 5 else "cut"
+            return row_idx, gr.update(value=transition_val, visible=True)
+
+        def _apply_transition_to_row(df_data, row_idx, transition_val):
+            if df_data is None or row_idx is None or row_idx < 0:
+                return df_data, "请先在表格中点选一行"
+            rows = _df_to_rows(df_data)
+            if not rows or row_idx >= len(rows):
+                return df_data, "行索引超出范围"
+            rows[row_idx][5] = transition_val
+            return rows, f"已将第 {row_idx + 1} 行的转场设为 '{transition_val}'"
+
+        def _apply_transition_to_all(df_data, transition_val):
+            if df_data is None:
+                return df_data, "没有片段"
+            rows = _df_to_rows(df_data)
+            if not rows:
+                return df_data, "没有片段"
+            for row in rows:
+                row[5] = transition_val
+            return rows, f"已将全部 {len(rows)} 个片段的转场设为 '{transition_val}'"
+
+        def _df_to_rows(df_data):
+            if df_data is None:
+                return None
+            if hasattr(df_data, "empty") and df_data.empty:
+                return None
+            if hasattr(df_data, "values"):
+                return df_data.values.tolist()
+            if isinstance(df_data, list):
+                return df_data
+            return None
+
+        segments_df.select(
+            fn=_on_segment_select,
+            inputs=[],
+            outputs=[_selected_row, transition_dd],
+        )
+
+        apply_transition_btn.click(
+            fn=_apply_transition_to_row,
+            inputs=[segments_df, _selected_row, transition_dd],
+            outputs=[segments_df, transition_status],
+        )
+
+        apply_all_transition_btn.click(
+            fn=_apply_transition_to_all,
+            inputs=[segments_df, transition_dd],
+            outputs=[segments_df, transition_status],
         )
 
         cut_btn.click(
