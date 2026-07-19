@@ -231,7 +231,7 @@ def create_ui():
     def load_segments(media_path, srt_file, json_file, md_file):
         err = _check_file(media_path, "视频/音频文件")
         if err:
-            return None, err
+            return None, err, -1
         media_path_str = _resolve_media_path(media_path)
 
         # If user explicitly provided files, use them directly
@@ -267,7 +267,7 @@ def create_ui():
             else:
                 project = srt_to_project(srt_file, media_path_str)
         else:
-            return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕"
+            return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕", -1
 
         # Build source info string
         def _display_path(p):
@@ -296,7 +296,7 @@ def create_ui():
                 seg["transition"],
                 seg["transition_duration"],
             ])
-        return rows, f"已加载 {len(project['segments'])} 个片段\n{source_info}"
+        return rows, f"已加载 {len(project['segments'])} 个片段\n{source_info}", -1
 
     def _parse_segments(segments_data):
         if segments_data is None:
@@ -859,7 +859,6 @@ def create_ui():
                         watch('value', attachListeners);""",
                         server_functions=[_delete_item, _view_item],
                     )
-                    _hist_status = gr.Textbox(label="", interactive=False)
 
                 # === Config Panel ===
                 with gr.Column(visible=False) as config_panel:
@@ -935,7 +934,7 @@ def create_ui():
         load_btn.click(
             fn=load_segments,
             inputs=[media_input, srt_input, json_input, md_input],
-            outputs=[segments_df, cut_status],
+            outputs=[segments_df, cut_status, _selected_row],
         )
 
         def _on_segment_select(evt: gr.SelectData):
