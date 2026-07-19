@@ -314,7 +314,7 @@ def create_ui():
             return None
 
         result = []
-        for row in rows:
+        for i, row in enumerate(rows):
             try:
                 result.append({
                     "index": int(float(row[0])),
@@ -325,7 +325,8 @@ def create_ui():
                     "transition": str(row[5]),
                     "transition_duration": float(row[6]),
                 })
-            except (ValueError, TypeError, IndexError):
+            except (ValueError, TypeError, IndexError) as e:
+                logging.warning(f"Skipping malformed segment row {i}: {row!r} ({e})")
                 continue
         return result
 
