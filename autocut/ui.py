@@ -250,7 +250,7 @@ def create_ui():
                         break
                 if srt_file is None:
                     for fname in os.listdir(source_dir):
-                        if fname.endswith(".json") and "_cut_" not in fname:
+                        if fname.endswith(".json"):
                             json_file = os.path.join(source_dir, fname)
                             break
             if json_file is None and srt_file is None:
