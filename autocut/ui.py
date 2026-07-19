@@ -544,6 +544,9 @@ def create_ui():
             if _cut_cancel.cancelled:
                 return
 
+            if not seg_files:
+                raise ValueError("所有片段时长为零或负数，无法剪辑")
+
             # Apply transitions
             has_transitions = any(
                 s.get("transition", "cut") in ("fade", "crossfade") for s in segments
