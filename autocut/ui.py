@@ -1055,7 +1055,10 @@ def create_ui():
 
         def open_workspace():
             ws = _get_workspace()
-            os.makedirs(ws, exist_ok=True)
+            try:
+                os.makedirs(ws, exist_ok=True)
+            except OSError as e:
+                return f"无法创建工作目录: {e}"
             return _open_directory(ws)
 
         save_workspace_btn.click(fn=save_workspace, inputs=[workspace_tb], outputs=[workspace_status])
