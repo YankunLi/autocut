@@ -581,8 +581,15 @@ def create_ui():
             "source": path,
             "segments": segments,
         }
-        json_path = os.path.splitext(path)[0] + ".json"
-        save_project(project, json_path)
+        source_dir = _get_source_dir(path)
+        if not source_dir:
+            source_dir = _create_source_dir(path)
+        source_name = os.path.splitext(os.path.basename(path))[0]
+        json_path = os.path.join(source_dir, source_name + ".json")
+        try:
+            save_project(project, json_path)
+        except OSError as e:
+            return f"保存失败: {e}"
         return f"项目已保存到 {json_path}"
 
     # --- History ---
@@ -845,7 +852,7 @@ def create_ui():
                         with gr.Row():
                             cut_btn = gr.Button("开始剪辑", variant="primary")
                             cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
-                            save_btn = gr.Button("保存项目 JSON", visible=False)
+                            save_btn = gr.Button("保存项目 JSON")
                             open_dir_btn = gr.Button("打开输出目录", visible=False)
                         cut_status = gr.Textbox(label="进度", interactive=False)
 
