@@ -445,6 +445,7 @@ def create_ui():
             shutil.copy2(media_path_str, dest_media)
 
     def run_cut(segments_data, media_path, precise):
+        _cut_cancel.reset()
         err = _check_file(media_path, "视频/音频文件")
         if err:
             yield err, gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
@@ -472,8 +473,6 @@ def create_ui():
                    gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=True))
             _last_output_path["value"] = existing_video
             return
-
-        _cut_cancel.reset()
 
         # Ensure source project dir exists and source media is copied
         source_dir = _get_source_dir(path)
