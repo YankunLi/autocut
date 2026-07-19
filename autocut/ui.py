@@ -339,15 +339,15 @@ def create_ui():
     # --- Step 4: cut ---
 
     def _open_directory(path):
-        dirname = os.path.dirname(path)
+        target = path if os.path.isdir(path) else os.path.dirname(path)
         try:
             if platform.system() == "Windows":
-                os.startfile(dirname)
+                os.startfile(target)
             elif platform.system() == "Darwin":
-                subprocess.Popen(["open", dirname])
+                subprocess.Popen(["open", target])
             else:
-                subprocess.Popen(["xdg-open", dirname])
-            return f"已打开文件夹: {dirname}"
+                subprocess.Popen(["xdg-open", target])
+            return f"已打开文件夹: {target}"
         except Exception as e:
             return f"打开文件夹失败: {e}"
 
@@ -1046,7 +1046,7 @@ def create_ui():
         def open_workspace():
             ws = _get_workspace()
             os.makedirs(ws, exist_ok=True)
-            return _open_directory(ws + os.sep)
+            return _open_directory(ws)
 
         save_workspace_btn.click(fn=save_workspace, inputs=[workspace_tb], outputs=[workspace_status])
         open_workspace_btn.click(fn=open_workspace, inputs=[], outputs=[workspace_status])
