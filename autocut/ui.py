@@ -42,9 +42,13 @@ class _CancelFlag:
             self._cancelled = False
 
 
-# Global cancel flags — one per operation type
-_transcribe_cancel = _CancelFlag()
-_cut_cancel = _CancelFlag()
+# Global cancel flags — one per operation type.
+# Each is a holder dict so transcribe_media/run_cut can swap in a fresh
+# _CancelFlag per call. The cancel button cancels the current flag; old
+# workers keep their captured (cancelled) flag and exit cleanly even if
+# a new operation starts before they finish.
+_transcribe_cancel = {"flag": _CancelFlag()}
+_cut_cancel = {"flag": _CancelFlag()}
 
 
 # --- Workspace config ---
@@ -129,7 +133,8 @@ def create_ui():
             yield None, "请先上传视频/音频文件", gr.update(interactive=True), gr.update(interactive=False)
             return
 
-        _transcribe_cancel.reset()
+        cancel_flag = _CancelFlag()
+        _transcribe_cancel["flag"] = cancel_flag
 
         from .transcribe import Transcribe
 
@@ -160,21 +165,21 @@ def create_ui():
                 result["step"] = "正在加载 Whisper 模型（首次需下载，请耐心等待）..."
                 t = Transcribe(args)
 
-                if _transcribe_cancel.cancelled:
+                if cancel_flag.cancelled:
                     result["status"] = "cancelled"
                     return
 
                 result["step"] = "正在加载音频文件..."
                 audio = utils.load_audio(path, sr=t.sampling_rate)
 
-                if _transcribe_cancel.cancelled:
+                if cancel_flag.cancelled:
                     result["status"] = "cancelled"
                     return
 
                 result["step"] = "正在检测语音活动 (VAD)..."
                 speech_array_indices = t._detect_voice_activity(audio)
 
-                if _transcribe_cancel.cancelled:
+                if cancel_flag.cancelled:
                     result["status"] = "cancelled"
                     return
 
@@ -182,7 +187,7 @@ def create_ui():
                 result["segment_total"] = len(speech_array_indices)
                 transcribe_results = t._transcribe(path, audio, speech_array_indices, progress_callback=_on_transcribe_progress)
 
-                if _transcribe_cancel.cancelled:
+                if cancel_flag.cancelled:
                     result["status"] = "cancelled"
                     return
 
@@ -208,7 +213,7 @@ def create_ui():
 
         last_step = None
         while result["status"] == "running":
-            if _transcribe_cancel.cancelled:
+            if cancel_flag.cancelled:
                 result["status"] = "cancelled"
                 break
             step = result["step"]
@@ -447,7 +452,8 @@ def create_ui():
             shutil.copy2(media_path_str, dest_media)
 
     def run_cut(segments_data, media_path, precise):
-        _cut_cancel.reset()
+        cancel_flag = _CancelFlag()
+        _cut_cancel["flag"] = cancel_flag
         err = _check_file(media_path, "视频/音频文件")
         if err:
             yield err, gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
@@ -494,12 +500,12 @@ def create_ui():
             output_fn = os.path.join(cut_dir, f"{source_name}_cut.{outext}")
             json_fn = os.path.join(cut_dir, f"{source_name}_cut.json")
 
-            for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
-                if _cut_cancel.cancelled:
+            for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file, cancel_flag):
+                if cancel_flag.cancelled:
                     yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
                     return
                 yield msg, gr.update(interactive=False), gr.update(interactive=True, visible=True), gr.update(visible=False)
-            if _cut_cancel.cancelled:
+            if cancel_flag.cancelled:
                 yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
                 return
             save_project(project, json_fn)
@@ -508,7 +514,7 @@ def create_ui():
         except Exception as e:
             yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
 
-    def _cut_with_progress(input_path, output_path, segments, precise, is_video_file):
+    def _cut_with_progress(input_path, output_path, segments, precise, is_video_file, cancel_flag):
         from .ffmpeg_cut import _run_ffmpeg
         import tempfile
         from .ffmpeg_cut import _concat_segments
@@ -518,7 +524,7 @@ def create_ui():
             seg_files = []
             total = len(segments)
             for i, seg in enumerate(segments):
-                if _cut_cancel.cancelled:
+                if cancel_flag.cancelled:
                     return
                 duration = seg["end"] - seg["start"]
                 if duration <= 0:
@@ -548,7 +554,7 @@ def create_ui():
                 _run_ffmpeg(cmd)
                 seg_files.append(seg_path)
 
-            if _cut_cancel.cancelled:
+            if cancel_flag.cancelled:
                 return
 
             if not seg_files:
@@ -563,7 +569,7 @@ def create_ui():
                 from .ffmpeg_cut import _apply_transitions
                 seg_files = _apply_transitions(seg_files, segments, is_video_file, tmpdir)
 
-            if _cut_cancel.cancelled:
+            if cancel_flag.cancelled:
                 return
 
             yield "正在合并片段..."
@@ -928,11 +934,11 @@ def create_ui():
         # --- Wire up events ---
 
         def cancel_transcribe():
-            _transcribe_cancel.cancel()
+            _transcribe_cancel["flag"].cancel()
             return gr.update(interactive=True), gr.update(interactive=False)
 
         def cancel_cut():
-            _cut_cancel.cancel()
+            _cut_cancel["flag"].cancel()
             return gr.update(interactive=True), gr.update(interactive=False)
 
         def open_output_dir():
