@@ -491,6 +491,9 @@ def create_ui():
                     yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
                     return
                 yield msg, gr.update(interactive=False), gr.update(interactive=True), gr.update(visible=False)
+            if _cut_cancel.cancelled:
+                yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+                return
             save_project(project, json_fn)
             yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True)
             _last_output_path["value"] = output_fn
