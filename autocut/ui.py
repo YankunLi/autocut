@@ -726,7 +726,10 @@ def create_ui():
         target_path = items[idx][1]
         if not os.path.isdir(target_path):
             return _refresh_history(), "路径已不存在"
-        shutil.rmtree(target_path)
+        try:
+            shutil.rmtree(target_path)
+        except OSError as e:
+            return _refresh_history(), f"删除失败: {e}"
         return _refresh_history(), "已删除"
 
     def _view_item(idx_val):
