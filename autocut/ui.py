@@ -1071,6 +1071,3 @@ def create_ui():
         open_workspace_btn.click(fn=open_workspace, inputs=[], outputs=[workspace_status])
 
     return app
-
-
-_BRIDGE_JS = ""
