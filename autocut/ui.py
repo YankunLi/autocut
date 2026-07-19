@@ -214,20 +214,20 @@ def create_ui():
             elapsed = int(time.time() - _worker_start)
             if step != last_step:
                 if result["segment_total"] > 0:
-                    yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True)
+                    yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True, visible=True)
                 else:
-                    yield None, step, gr.update(interactive=False), gr.update(interactive=True)
+                    yield None, step, gr.update(interactive=False), gr.update(interactive=True, visible=True)
                 last_step = step
             else:
-                yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True)
+                yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True, visible=True)
             time.sleep(2)
 
         if result["status"] == "cancelled":
-            yield None, "转录已取消", gr.update(interactive=True), gr.update(interactive=False)
+            yield None, "转录已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False)
         elif result["status"] == "error":
-            yield None, f"转录失败: {result['error']}", gr.update(interactive=True), gr.update(interactive=False)
+            yield None, f"转录失败: {result['error']}", gr.update(interactive=True), gr.update(interactive=False, visible=False)
         else:
-            yield result["srt_path"], f"转录完成！已生成 {result['srt_path']}", gr.update(interactive=True), gr.update(interactive=False)
+            yield result["srt_path"], f"转录完成！已生成 {result['srt_path']}", gr.update(interactive=True), gr.update(interactive=False, visible=False)
 
     # --- Step 3: load & display ---
 
@@ -469,7 +469,7 @@ def create_ui():
         existing_video, existing_json = _find_existing_cut(project, path)
         if existing_video:
             yield (f"剪辑视频已存在，跳过重复剪辑：\n视频: {existing_video}\n项目: {existing_json}",
-                   gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True))
+                   gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=True))
             _last_output_path["value"] = existing_video
             return
 
@@ -495,17 +495,17 @@ def create_ui():
         try:
             for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
                 if _cut_cancel.cancelled:
-                    yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+                    yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
                     return
-                yield msg, gr.update(interactive=False), gr.update(interactive=True), gr.update(visible=False)
+                yield msg, gr.update(interactive=False), gr.update(interactive=True, visible=True), gr.update(visible=False)
             if _cut_cancel.cancelled:
-                yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+                yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
                 return
             save_project(project, json_fn)
-            yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=True)
+            yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=True)
             _last_output_path["value"] = output_fn
         except Exception as e:
-            yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+            yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
 
     def _cut_with_progress(input_path, output_path, segments, precise, is_video_file):
         from .ffmpeg_cut import _run_ffmpeg
