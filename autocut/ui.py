@@ -199,7 +199,7 @@ def create_ui():
                 result["srt_path"] = srt_path
             except Exception as e:
                 result["status"] = "error"
-                result["error"] = str(e)
+                result["error"] = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
 
         _worker_start = time.time()
         thread = threading.Thread(target=_worker, daemon=True)
