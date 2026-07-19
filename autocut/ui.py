@@ -1,3 +1,4 @@
+import html
 import json
 import logging
 import os
@@ -672,9 +673,9 @@ def create_ui():
         html_parts = []
         idx = 0
         for rec in records:
-            source_dirname = rec["source_dirname"]
-            source_name = rec["source_name"]
-            created = rec["created"]
+            source_dirname = html.escape(rec["source_dirname"])
+            source_name = html.escape(rec["source_name"])
+            created = html.escape(rec["created"])
             html_parts.append(
                 "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px;'>"
                 "<div style='display:flex; justify-content:space-between; align-items:center;'>"
@@ -684,8 +685,8 @@ def create_ui():
             )
             idx += 1
             for cut in rec["cuts"]:
-                video_name = os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
-                cut_dirname = cut["cut_dirname"]
+                video_name = html.escape(os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)")
+                cut_dirname = html.escape(cut["cut_dirname"])
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
                     f"<div><b>{cut_dirname}</b><br><span style='color:#666; font-size:12px;'>{video_name}</span></div>"
