@@ -380,7 +380,8 @@ def create_ui():
                     continue
                 if existing.get("source") != media_path_str:
                     continue
-                existing_content = json_mod.dumps(existing["segments"], sort_keys=True, ensure_ascii=False)
+                existing_segs = existing.get("segments", [])
+                existing_content = json_mod.dumps(existing_segs, sort_keys=True, ensure_ascii=False)
                 existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
                 if existing_hash != content_hash:
                     continue
