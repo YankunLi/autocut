@@ -744,8 +744,8 @@ def create_ui():
         video_path = items[idx][2]
         if not video_path or not os.path.exists(video_path):
             return _refresh_history(), "视频文件不存在"
-        _open_directory(video_path)
-        return _refresh_history(), "已打开文件夹"
+        msg = _open_directory(video_path)
+        return _refresh_history(), msg
 
     # --- Build UI ---
 
