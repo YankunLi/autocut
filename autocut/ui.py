@@ -263,12 +263,18 @@ def create_ui():
                     srt_file = auto_srt
 
         if json_file is not None:
-            project = load_project(json_file)
+            try:
+                project = load_project(json_file)
+            except (OSError, json.JSONDecodeError) as e:
+                return None, f"无法读取 JSON 项目文件: {e}", -1
         elif srt_file is not None:
-            if md_file is not None:
-                project = md_to_project(md_file, srt_file, media_path_str)
-            else:
-                project = srt_to_project(srt_file, media_path_str)
+            try:
+                if md_file is not None:
+                    project = md_to_project(md_file, srt_file, media_path_str)
+                else:
+                    project = srt_to_project(srt_file, media_path_str)
+            except Exception as e:
+                return None, f"无法解析字幕文件: {e}", -1
         else:
             return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕", -1
 
