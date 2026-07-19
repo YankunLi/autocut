@@ -970,7 +970,11 @@ def create_ui():
             transition_val = row_val[5] if row_val and len(row_val) > 5 else "cut"
             return row_idx, gr.update(value=transition_val, visible=True)
 
+        _ALLOWED_TRANSITIONS = ("cut", "fade", "crossfade")
+
         def _apply_transition_to_row(df_data, row_idx, transition_val):
+            if transition_val not in _ALLOWED_TRANSITIONS:
+                return df_data, f"无效的转场类型: {transition_val}"
             if df_data is None or row_idx is None or row_idx < 0:
                 return df_data, "请先在表格中点选一行"
             rows = _df_to_rows(df_data)
@@ -980,6 +984,8 @@ def create_ui():
             return rows, f"已将第 {row_idx + 1} 行的转场设为 '{transition_val}'"
 
         def _apply_transition_to_all(df_data, transition_val):
+            if transition_val not in _ALLOWED_TRANSITIONS:
+                return df_data, f"无效的转场类型: {transition_val}"
             if df_data is None:
                 return df_data, "没有片段"
             rows = _df_to_rows(df_data)
