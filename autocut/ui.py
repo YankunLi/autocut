@@ -475,24 +475,24 @@ def create_ui():
             _last_output_path["value"] = existing_video
             return
 
-        # Ensure source project dir exists and source media is copied
-        source_dir = _get_source_dir(path)
-        if not source_dir:
-            source_dir = _create_source_dir(path)
-        _ensure_source_copied(source_dir, path)
-
-        is_video_file = utils.is_video(path.lower())
-        outext = "mp4" if is_video_file else "mp3"
-        source_name = os.path.splitext(os.path.basename(path))[0]
-        # Each cut gets its own subdirectory
-        cut_dirname = _gen_dirname(source_name + "_cut")
-        cut_dir = os.path.join(source_dir, cut_dirname)
-        os.makedirs(cut_dir, exist_ok=True)
-        output_fn = os.path.join(cut_dir, f"{source_name}_cut.{outext}")
-        json_fn = os.path.join(cut_dir, f"{source_name}_cut.json")
-
         total = len(cut_segs)
         try:
+            # Ensure source project dir exists and source media is copied
+            source_dir = _get_source_dir(path)
+            if not source_dir:
+                source_dir = _create_source_dir(path)
+            _ensure_source_copied(source_dir, path)
+
+            is_video_file = utils.is_video(path.lower())
+            outext = "mp4" if is_video_file else "mp3"
+            source_name = os.path.splitext(os.path.basename(path))[0]
+            # Each cut gets its own subdirectory
+            cut_dirname = _gen_dirname(source_name + "_cut")
+            cut_dir = os.path.join(source_dir, cut_dirname)
+            os.makedirs(cut_dir, exist_ok=True)
+            output_fn = os.path.join(cut_dir, f"{source_name}_cut.{outext}")
+            json_fn = os.path.join(cut_dir, f"{source_name}_cut.json")
+
             for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file):
                 if _cut_cancel.cancelled:
                     yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
