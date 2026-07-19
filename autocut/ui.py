@@ -3,6 +3,7 @@ import logging
 import os
 import platform
 import random
+import re
 import shutil
 import string
 import subprocess
@@ -87,7 +88,9 @@ def _gen_dirname(source_name):
     """Generate a directory name: YYYYMMDD_HHMMSS_<random4>_<source_name>"""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     rand4 = "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
-    return f"{timestamp}_{rand4}_{source_name}"
+    # Strip characters that are invalid in directory names on Windows
+    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source_name).strip(" .") or "source"
+    return f"{timestamp}_{rand4}_{safe_name}"
 
 
 def create_ui():
