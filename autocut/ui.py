@@ -375,11 +375,19 @@ def create_ui():
             return None, None
 
         # Scan cut subdirectories
-        for name in os.listdir(source_dir):
+        try:
+            entries = os.listdir(source_dir)
+        except OSError:
+            return None, None
+        for name in entries:
             cut_dir = os.path.join(source_dir, name)
             if not os.path.isdir(cut_dir):
                 continue
-            for fname in os.listdir(cut_dir):
+            try:
+                cut_entries = os.listdir(cut_dir)
+            except OSError:
+                continue
+            for fname in cut_entries:
                 if not fname.endswith(".json"):
                     continue
                 fpath = os.path.join(cut_dir, fname)
@@ -410,7 +418,11 @@ def create_ui():
         workspace = _get_workspace()
         source_name = os.path.splitext(os.path.basename(media_path_str))[0]
         if os.path.isdir(workspace):
-            for name in os.listdir(workspace):
+            try:
+                entries = os.listdir(workspace)
+            except OSError:
+                return None
+            for name in entries:
                 candidate = os.path.join(workspace, name)
                 if not os.path.isdir(candidate):
                     continue
@@ -621,7 +633,11 @@ def create_ui():
         if not os.path.isdir(workspace):
             return history
 
-        for dirname in sorted(os.listdir(workspace), reverse=True):
+        try:
+            top_entries = os.listdir(workspace)
+        except OSError:
+            return history
+        for dirname in sorted(top_entries, reverse=True):
             source_dir = os.path.join(workspace, dirname)
             if not os.path.isdir(source_dir):
                 continue
@@ -638,12 +654,20 @@ def create_ui():
             created = meta.get("created", "")
 
             cuts = []
-            for sub_name in sorted(os.listdir(source_dir), reverse=True):
+            try:
+                sub_entries = os.listdir(source_dir)
+            except OSError:
+                sub_entries = []
+            for sub_name in sorted(sub_entries, reverse=True):
                 cut_dir = os.path.join(source_dir, sub_name)
                 if not os.path.isdir(cut_dir):
                     continue
                 # Look for .json project file inside cut dir
-                for fname in os.listdir(cut_dir):
+                try:
+                    cut_files = os.listdir(cut_dir)
+                except OSError:
+                    continue
+                for fname in cut_files:
                     if not fname.endswith(".json"):
                         continue
                     json_path = os.path.join(cut_dir, fname)
