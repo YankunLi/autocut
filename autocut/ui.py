@@ -284,6 +284,9 @@ def create_ui():
         else:
             return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕", -1
 
+        if not isinstance(project, dict) or not isinstance(project.get("segments"), list):
+            return None, "项目文件格式无效：缺少 segments 列表", -1
+
         # Build source info string
         def _display_path(p):
             if p is None:
