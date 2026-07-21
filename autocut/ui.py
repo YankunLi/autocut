@@ -603,12 +603,12 @@ def create_ui():
             "source": path,
             "segments": segments,
         }
-        source_dir = _get_source_dir(path)
-        if not source_dir:
-            source_dir = _create_source_dir(path)
         source_name = os.path.splitext(os.path.basename(path))[0]
-        json_path = os.path.join(source_dir, source_name + ".json")
         try:
+            source_dir = _get_source_dir(path)
+            if not source_dir:
+                source_dir = _create_source_dir(path)
+            json_path = os.path.join(source_dir, source_name + ".json")
             save_project(project, json_path)
         except OSError as e:
             return f"保存失败: {e}"
