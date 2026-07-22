@@ -50,12 +50,16 @@ class Merger:
         for m, t in md.tasks():
             if not m:
                 continue
-            m = re.findall(r"\[(.*)\]", t)
+            m = re.findall(r"\[([^\]]*)\]", t)
             if not m:
                 continue
             fn = os.path.join(os.path.dirname(md_fn), m[0])
             logging.info(f"Loading {fn}")
             videos.append(fn)
+
+        if not videos:
+            logging.warning("No videos selected for merging, skipping")
+            return
 
         logging.info(f"Merging {len(videos)} videos")
 
@@ -68,12 +72,14 @@ class Merger:
         else:
             from moviepy import editor
             clips = [editor.VideoFileClip(v) for v in videos]
-            merged = editor.concatenate_videoclips(clips)
-            merged.write_videofile(
-                fn, audio_codec="aac", bitrate=self.args.bitrate
-            )
-            for c in clips:
-                c.close()
+            try:
+                merged = editor.concatenate_videoclips(clips)
+                merged.write_videofile(
+                    fn, audio_codec="aac", bitrate=self.args.bitrate
+                )
+            finally:
+                for c in clips:
+                    c.close()
 
         logging.info(f"Saved merged video to {fn}")
 
