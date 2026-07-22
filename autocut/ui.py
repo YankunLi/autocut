@@ -530,12 +530,26 @@ def create_ui():
             yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
 
     def _cut_with_progress(input_path, output_path, segments, precise, is_video_file, cancel_flag):
-        from .ffmpeg_cut import _run_ffmpeg
+        from .ffmpeg_cut import _run_ffmpeg, _concat_segments, cut_segments_stream_copy
         import tempfile
-        from .ffmpeg_cut import _concat_segments
 
         ext = os.path.splitext(output_path)[1]
         kept = [s for s in segments if (s["end"] - s["start"]) > 0]
+
+        has_transitions = any(
+            s.get("transition", "cut") in ("fade", "crossfade") for s in kept
+        )
+
+        # Stream-copy path: fast but not frame-accurate, no transition support.
+        # Used when the user unchecks "帧精确剪切" and no transitions are set.
+        if not precise and not has_transitions:
+            if cancel_flag.cancelled:
+                return
+            yield "正在剪切（流复制模式，较快）..."
+            cut_segments_stream_copy(input_path, output_path, kept, precise=False)
+            return
+
+        # Re-encode path: frame-accurate, supports transitions.
         with tempfile.TemporaryDirectory() as tmpdir:
             seg_files = []
             total = len(kept)
@@ -574,10 +588,6 @@ def create_ui():
             if not seg_files:
                 raise ValueError("所有片段时长为零或负数，无法剪辑")
 
-            # Apply transitions
-            has_transitions = any(
-                s.get("transition", "cut") in ("fade", "crossfade") for s in kept
-            )
             if has_transitions:
                 yield "正在应用转场效果..."
                 from .ffmpeg_cut import _apply_transitions
