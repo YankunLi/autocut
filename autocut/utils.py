@@ -18,6 +18,10 @@ def load_audio(file: str, sr: int = 16000) -> np.ndarray:
     except ffmpeg.Error as e:
         stderr = (e.stderr or b"").decode(errors="replace")
         raise RuntimeError(f"Failed to load audio: {stderr}") from e
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "ffmpeg not found. Please install ffmpeg and add it to PATH."
+        ) from e
 
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
