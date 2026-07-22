@@ -216,7 +216,8 @@ def compact_rst(sub_fn, encoding):
 def trans_srt_to_md(encoding, force, srt_fn, video_fn=None):
     base, ext = os.path.splitext(srt_fn)
     if ext != ".srt":
-        logging.fatal("only .srt file is supported")
+        logging.error("only .srt file is supported")
+        return
     md_fn = base + ext.split(".")[0] + ".md"
 
     check_exists(md_fn, force)
