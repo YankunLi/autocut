@@ -34,11 +34,13 @@ class Daemon:
                     transcribe.Transcribe(args).run()
                     self.sleep = 1
                     break
-                except RuntimeError as e:
-                    logging.warn(
-                        "Failed, may be due to the video is still on recording"
+                except Exception as e:
+                    logging.warning(
+                        "Transcribe failed for %s: %r (may be due to the video still recording)",
+                        f,
+                        e,
                     )
-                    pass
+                    continue
             if md_fn in files:
                 if utils.add_cut(md_fn) in files:
                     continue
@@ -49,10 +51,17 @@ class Daemon:
                 ):
                     continue
                 args.inputs = [f, md_fn, srt_fn]
-                cut.Cutter(args).run()
-                self.sleep = 1
+                try:
+                    cut.Cutter(args).run()
+                    self.sleep = 1
+                except Exception as e:
+                    logging.warning("Cut failed for %s: %r", f, e)
+                    continue
 
         args.inputs = [os.path.join(folder, "autocut.md")]
         merger = cut.Merger(args)
-        merger.write_md(media_files)
-        merger.run()
+        try:
+            merger.write_md(media_files)
+            merger.run()
+        except Exception as e:
+            logging.warning("Merger failed: %r", e)
