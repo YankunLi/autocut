@@ -535,15 +535,14 @@ def create_ui():
         from .ffmpeg_cut import _concat_segments
 
         ext = os.path.splitext(output_path)[1]
+        kept = [s for s in segments if (s["end"] - s["start"]) > 0]
         with tempfile.TemporaryDirectory() as tmpdir:
             seg_files = []
-            total = len(segments)
-            for i, seg in enumerate(segments):
+            total = len(kept)
+            for i, seg in enumerate(kept):
                 if cancel_flag.cancelled:
                     return
                 duration = seg["end"] - seg["start"]
-                if duration <= 0:
-                    continue
                 yield f"正在提取片段 {i + 1}/{total}（{duration:.1f}秒）..."
                 seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
                 if is_video_file:
@@ -577,12 +576,12 @@ def create_ui():
 
             # Apply transitions
             has_transitions = any(
-                s.get("transition", "cut") in ("fade", "crossfade") for s in segments
+                s.get("transition", "cut") in ("fade", "crossfade") for s in kept
             )
             if has_transitions:
                 yield "正在应用转场效果..."
                 from .ffmpeg_cut import _apply_transitions
-                seg_files = _apply_transitions(seg_files, segments, is_video_file, tmpdir)
+                seg_files = _apply_transitions(seg_files, kept, is_video_file, tmpdir)
 
             if cancel_flag.cancelled:
                 return
