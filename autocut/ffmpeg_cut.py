@@ -172,14 +172,11 @@ def _cut_segments_precise(
 ) -> str:
     is_video = ext in (".mp4", ".mov", ".mkv", ".avi", ".flv", ".f4v", ".webm")
 
+    kept = [s for s in segments if (s["end"] - s["start"]) > 0]
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
-        for i, seg in enumerate(segments):
+        for i, seg in enumerate(kept):
             duration = seg["end"] - seg["start"]
-            if duration <= 0:
-                logging.warning(f"Skipping segment {i}: non-positive duration {duration}")
-                continue
-
             seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
             if is_video:
                 cmd = [
@@ -210,10 +207,10 @@ def _cut_segments_precise(
 
         # Apply fade/crossfade transitions if any segment has a non-cut transition
         has_transitions = any(
-            s.get("transition", "cut") in ("fade", "crossfade") for s in segments
+            s.get("transition", "cut") in ("fade", "crossfade") for s in kept
         )
         if has_transitions:
-            seg_files = _apply_transitions(seg_files, segments, is_video, tmpdir)
+            seg_files = _apply_transitions(seg_files, kept, is_video, tmpdir)
 
         # Segments are already re-encoded with consistent parameters,
         # so concat with stream copy (no double re-encode).
