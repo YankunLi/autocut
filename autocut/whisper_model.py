@@ -92,7 +92,6 @@ class WhisperModel(AbstractWhisperModel):
                     pool.apply_async(
                         self._transcribe,
                         (
-                            self.whisper_model,
                             audio,
                             seg,
                             lang,
