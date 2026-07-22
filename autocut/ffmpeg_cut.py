@@ -16,7 +16,9 @@ def _run_ffmpeg(cmd: list[str]) -> str:
 
 
 def _to_concat_path(path: str) -> str:
-    return path.replace("\\", "/")
+    # ffmpeg's concat demuxer wraps paths in single quotes and uses
+    # '\'' as the escape sequence for a literal single quote.
+    return path.replace("\\", "/").replace("'", "'\\''")
 
 
 def _get_keyframes(input_path: str) -> list[float]:
