@@ -291,24 +291,30 @@ class OpenAIModel(AbstractWhisperModel):
         self, input: srt, audio: AudioSegment, prompt: str, lang: LANG, start_ms: float
     ):
         audio.export(input, "wav")
-        subtitles = self.whisper_model(
-            file=open(input, "rb"), prompt=prompt, language=lang, response_format="srt"
-        )
-        os.remove(input)
-        return list(
-            map(
-                lambda x: (
-                    setattr(
-                        x, "start", x.start + datetime.timedelta(milliseconds=start_ms)
-                    ),
-                    setattr(
-                        x, "end", x.end + datetime.timedelta(milliseconds=start_ms)
-                    ),
-                    x,
-                )[-1],
-                list(srt.parse(subtitles)),
+        try:
+            with open(input, "rb") as f:
+                subtitles = self.whisper_model(
+                    file=f, prompt=prompt, language=lang, response_format="srt"
+                )
+            return list(
+                map(
+                    lambda x: (
+                        setattr(
+                            x, "start", x.start + datetime.timedelta(milliseconds=start_ms)
+                        ),
+                        setattr(
+                            x, "end", x.end + datetime.timedelta(milliseconds=start_ms)
+                        ),
+                        x,
+                    )[-1],
+                    list(srt.parse(subtitles)),
+                )
             )
-        )
+        finally:
+            try:
+                os.remove(input)
+            except OSError:
+                pass
 
     def gen_srt(self, transcribe_results: List[srt.Subtitle]):
         if len(transcribe_results) == 0:
