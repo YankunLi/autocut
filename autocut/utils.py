@@ -16,7 +16,8 @@ def load_audio(file: str, sr: int = 16000) -> np.ndarray:
             .run(cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True)
         )
     except ffmpeg.Error as e:
-        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
+        stderr = (e.stderr or b"").decode(errors="replace")
+        raise RuntimeError(f"Failed to load audio: {stderr}") from e
 
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
@@ -178,7 +179,8 @@ def compact_rst(sub_fn, encoding):
     base, ext = os.path.splitext(sub_fn)
     COMPACT = "_compact"
     if ext != ".srt":
-        logging.fatal("only .srt file is supported")
+        logging.error("only .srt file is supported")
+        return
 
     if base.endswith(COMPACT):
         # to original rst
@@ -227,8 +229,9 @@ def trans_srt_to_md(encoding, force, srt_fn, video_fn=None):
     md.add_done_editing(False)
     if video_fn:
         if not is_video(video_fn):
-            logging.fatal(f"{video_fn} may not be a video")
-        md.add_video(os.path.basename(video_fn))
+            logging.warning(f"{video_fn} may not be a video, skipping video tag")
+        else:
+            md.add_video(os.path.basename(video_fn))
     md.add(
         f"\nTexts generated from [{os.path.basename(srt_fn)}]({os.path.basename(srt_fn)})."
         "Mark the sentences to keep for autocut.\n"
