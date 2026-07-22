@@ -135,32 +135,33 @@ class Cutter:
             else:
                 media = editor.AudioFileClip(fns["media"])
 
-            clips = [media.subclip(s["start"], s["end"]) for s in segments]
-            if is_video_file:
-                final_clip = editor.concatenate_videoclips(clips)
-                logging.info(
-                    f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
-                )
+            try:
+                clips = [media.subclip(s["start"], s["end"]) for s in segments]
+                if is_video_file:
+                    final_clip = editor.concatenate_videoclips(clips)
+                    logging.info(
+                        f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
+                    )
 
-                aud = final_clip.audio.set_fps(44100)
-                final_clip = final_clip.without_audio().set_audio(aud)
-                final_clip = final_clip.fx(editor.afx.audio_normalize)
+                    aud = final_clip.audio.set_fps(44100)
+                    final_clip = final_clip.without_audio().set_audio(aud)
+                    final_clip = final_clip.fx(editor.afx.audio_normalize)
 
-                final_clip.write_videofile(
-                    output_fn, audio_codec="aac", bitrate=self.args.bitrate
-                )
-            else:
-                final_clip = editor.concatenate_audioclips(clips)
-                logging.info(
-                    f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
-                )
+                    final_clip.write_videofile(
+                        output_fn, audio_codec="aac", bitrate=self.args.bitrate
+                    )
+                else:
+                    final_clip = editor.concatenate_audioclips(clips)
+                    logging.info(
+                        f"Reduced duration from {media.duration:.1f} to {final_clip.duration:.1f}"
+                    )
 
-                final_clip = final_clip.fx(editor.afx.audio_normalize)
-                final_clip.write_audiofile(
-                    output_fn, codec="libmp3lame", fps=44100, bitrate=self.args.bitrate
-                )
-
-            media.close()
+                    final_clip = final_clip.fx(editor.afx.audio_normalize)
+                    final_clip.write_audiofile(
+                        output_fn, codec="libmp3lame", fps=44100, bitrate=self.args.bitrate
+                    )
+            finally:
+                media.close()
 
         project_json_path = utils.change_ext(output_fn, "json")
         save_project(project, project_json_path)
