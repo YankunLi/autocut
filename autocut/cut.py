@@ -92,7 +92,7 @@ class Cutter:
     def run(self):
         fns = {"srt": None, "media": None, "md": None, "json": None}
         for fn in self.args.inputs:
-            ext = os.path.splitext(fn)[1][1:]
+            ext = os.path.splitext(fn)[1][1:].lower()
             fns[ext if ext in fns else "media"] = fn
 
         assert fns["media"], "must provide a media filename"
