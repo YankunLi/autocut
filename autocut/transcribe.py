@@ -40,7 +40,13 @@ class Transcribe:
         for input in self.args.inputs:
             logging.info(f"Transcribing {input}")
             name, _ = os.path.splitext(input)
-            if utils.check_exists(name + ".md", self.args.force):
+            # Skip only if BOTH srt and md exist (both are needed downstream:
+            # the Cutter reads the srt, the md marks editing progress).
+            # If either is missing, re-transcribe to regenerate both.
+            if (
+                utils.check_exists(name + ".srt", self.args.force)
+                and utils.check_exists(name + ".md", self.args.force)
+            ):
                 continue
 
             audio = utils.load_audio(input, sr=self.sampling_rate)
