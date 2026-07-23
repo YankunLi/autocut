@@ -250,12 +250,16 @@ def create_ui():
             # Auto-detect: first check workspace project dir, then next to media
             source_dir = _get_source_dir(media_path_str)
             if source_dir:
-                for fname in os.listdir(source_dir):
+                try:
+                    dir_entries = os.listdir(source_dir)
+                except OSError as e:
+                    return None, f"无法读取项目目录 {source_dir}: {e}", -1
+                for fname in dir_entries:
                     if fname.endswith(".srt"):
                         srt_file = os.path.join(source_dir, fname)
                         break
                 if srt_file is None:
-                    for fname in os.listdir(source_dir):
+                    for fname in dir_entries:
                         if fname.endswith(".json"):
                             json_file = os.path.join(source_dir, fname)
                             break
