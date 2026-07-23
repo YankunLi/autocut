@@ -328,6 +328,15 @@ def create_ui():
         else:
             return None
 
+        def _to_bool(v):
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, (int, float)):
+                return v != 0
+            if isinstance(v, str):
+                return v.strip().lower() in ("true", "1", "yes", "x")
+            return bool(v)
+
         result = []
         for i, row in enumerate(rows):
             try:
@@ -336,11 +345,11 @@ def create_ui():
                     "start": float(row[1]),
                     "end": float(row[2]),
                     "text": str(row[3]),
-                    "keep": bool(row[4]),
+                    "keep": _to_bool(row[4]),
                     "transition": str(row[5]),
                     "transition_duration": float(row[6]),
                 })
-            except (ValueError, TypeError, IndexError) as e:
+            except (ValueError, TypeError, IndexError, KeyError) as e:
                 logging.warning(f"Skipping malformed segment row {i}: {row!r} ({e})")
                 continue
         return result
