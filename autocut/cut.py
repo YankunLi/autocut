@@ -71,8 +71,10 @@ class Merger:
             merge_videos_stream_copy(videos, fn)
         else:
             from moviepy import editor
-            clips = [editor.VideoFileClip(v) for v in videos]
+            clips = []
             try:
+                for v in videos:
+                    clips.append(editor.VideoFileClip(v))
                 merged = editor.concatenate_videoclips(clips)
                 merged.write_videofile(
                     fn, audio_codec="aac", bitrate=self.args.bitrate
