@@ -47,10 +47,7 @@ def change_ext(filename, new_ext):
 def add_cut(filename):
     # Add cut mark to the filename
     base, ext = os.path.splitext(filename)
-    if base.endswith("_cut"):
-        base = base[:-4] + "_" + base[-4:]
-    else:
-        base += "_cut"
+    base += "_cut"
     return base + ext
 
 
