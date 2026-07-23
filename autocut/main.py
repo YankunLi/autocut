@@ -216,7 +216,10 @@ def main():
 
         Daemon(args).run()
     elif args.s:
-        utils.compact_rst(args.inputs[0], args.encoding)
+        if not args.inputs:
+            logging.warning("No input file, please pass in a .srt file")
+        else:
+            utils.compact_rst(args.inputs[0], args.encoding)
     elif args.ui:
         from .ui import create_ui
 
