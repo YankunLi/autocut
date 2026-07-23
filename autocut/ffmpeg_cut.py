@@ -172,7 +172,7 @@ def _cut_segments_precise(
     segments: list[dict[str, float]],
     ext: str,
 ) -> str:
-    is_video = ext in (".mp4", ".mov", ".mkv", ".avi", ".flv", ".f4v", ".webm")
+    is_video = ext.lower() in (".mp4", ".mov", ".mkv", ".avi", ".flv", ".f4v", ".webm")
 
     kept = [s for s in segments if (s["end"] - s["start"]) > 0]
     with tempfile.TemporaryDirectory() as tmpdir:
