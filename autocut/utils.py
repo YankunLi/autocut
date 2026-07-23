@@ -219,9 +219,10 @@ def trans_srt_to_md(encoding, force, srt_fn, video_fn=None):
     if ext != ".srt":
         logging.error("only .srt file is supported")
         return
-    md_fn = base + ext.split(".")[0] + ".md"
+    md_fn = base + ".md"
 
-    check_exists(md_fn, force)
+    if check_exists(md_fn, force):
+        return
 
     with open(srt_fn, encoding=encoding) as f:
         subs = srt.parse(f.read())
