@@ -42,8 +42,6 @@ class Daemon:
                     )
                     continue
             if md_fn in files:
-                if utils.add_cut(md_fn) in files:
-                    continue
                 md = utils.MD(md_fn, self.args.encoding)
                 ext = "mp4" if is_video_file else "mp3"
                 if not md.done_editing() or os.path.exists(
