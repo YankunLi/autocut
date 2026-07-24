@@ -128,7 +128,9 @@ def expand_segments(segments, expand_head, expand_tail, total_length):
     results = []
     for i in range(len(segments)):
         t = segments[i]
-        start = max(t["start"] - expand_head, segments[i - 1]["end"] if i > 0 else 0)
+        # Clamp start against the EXPANDED end of the previous segment so a
+        # non-zero expand_tail can't make consecutive segments overlap.
+        start = max(t["start"] - expand_head, results[i - 1]["end"] if i > 0 else 0)
         end = min(
             t["end"] + expand_tail,
             segments[i + 1]["start"] if i < len(segments) - 1 else total_length,
