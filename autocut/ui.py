@@ -429,7 +429,6 @@ def create_ui():
         return it. Otherwise caller should create a new one.
         """
         workspace = _get_workspace()
-        source_name = os.path.splitext(os.path.basename(media_path_str))[0]
         if os.path.isdir(workspace):
             try:
                 entries = os.listdir(workspace)
