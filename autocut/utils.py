@@ -175,8 +175,6 @@ def merge_adjacent_segments(segments, threshold):
 
 
 def compact_rst(sub_fn, encoding):
-    cc = opencc.OpenCC("t2s")
-
     base, ext = os.path.splitext(sub_fn)
     COMPACT = "_compact"
     if ext != ".srt":
@@ -204,6 +202,7 @@ def compact_rst(sub_fn, encoding):
             f.write(srt.compose(subs).encode(encoding, "replace"))
     else:
         # to a compact version
+        cc = opencc.OpenCC("t2s")
         with open(sub_fn, encoding=encoding) as f:
             subs = srt.parse(f.read())
         with open(base + COMPACT + ext, "wb") as f:
