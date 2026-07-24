@@ -289,8 +289,8 @@ class OpenAIModel(AbstractWhisperModel):
     def _transcribe(
         self, input: srt, audio: AudioSegment, prompt: str, lang: LANG, start_ms: float
     ):
-        audio.export(input, "wav")
         try:
+            audio.export(input, "wav")
             with open(input, "rb") as f:
                 subtitles = self.whisper_model(
                     file=f, prompt=prompt, language=lang, response_format="srt"
