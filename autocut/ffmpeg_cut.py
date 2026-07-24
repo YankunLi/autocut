@@ -84,6 +84,19 @@ def _apply_transitions(seg_files, segments, is_video, tmpdir):
             continue
 
         dur = seg["end"] - seg["start"]
+        # Clamp transition duration so fades don't overlap or exceed the segment.
+        # If both fade-in and fade-out apply, each gets at most half the segment.
+        max_trans = dur / 2 if (needs_fade_in and needs_fade_out) else dur
+        if trans_dur > max_trans:
+            logging.warning(
+                f"Segment {i} duration {dur:.2f}s shorter than transition {trans_dur}s; "
+                f"clamping transition to {max_trans:.2f}s"
+            )
+            trans_dur = max_trans
+        if trans_dur <= 0:
+            result_files.append(seg_path)
+            continue
+
         vfilters = []
         afilters = []
 
