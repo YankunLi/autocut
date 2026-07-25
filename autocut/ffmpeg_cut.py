@@ -69,13 +69,6 @@ def _find_nearest_keyframe_before(keyframes: list[float], time: float) -> float:
     return best
 
 
-def _find_nearest_keyframe_after(keyframes: list[float], time: float) -> float:
-    for kf in keyframes:
-        if kf >= time:
-            return kf
-    return keyframes[-1] if keyframes else time
-
-
 def _apply_transitions(seg_files, segments, is_video, tmpdir):
     """Apply fade/crossfade filters to segment files based on transition settings."""
     result_files = []
