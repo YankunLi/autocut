@@ -236,7 +236,9 @@ class OpenAIModel(AbstractWhisperModel):
                     f"{self.split_audio_bytes}-byte split threshold (set 2MB below the "
                     f"{self.max_single_audio_bytes}-byte OpenAI API limit); segmenting it."
                 )
-                split_num = len(audio_seg.raw_data) // self.split_audio_bytes + 1
+                split_num = (
+                    len(audio_seg.raw_data) + self.split_audio_bytes - 1
+                ) // self.split_audio_bytes
                 for j in range(split_num):
                     temp_file = f"{name}_{i}_temp_{j}.wav"
                     split_audio = audio_seg[
