@@ -1,6 +1,6 @@
 import json
 import re
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import srt
 
@@ -68,7 +68,7 @@ def md_to_project(
 
 def project_to_segments(
     project: CutProject, merge_gap: float = 0.5
-) -> list[dict[str, float]]:
+) -> list[dict[str, Any]]:
     all_segs = sorted(project["segments"], key=lambda s: s["start"])
     kept = [s for s in all_segs if s["keep"]]
     if not kept:
