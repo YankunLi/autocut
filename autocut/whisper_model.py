@@ -46,9 +46,7 @@ class WhisperModel(AbstractWhisperModel):
 
     def load(
         self,
-        model_name: Literal[
-            "tiny", "base", "small", "medium", "large", "large-v2"
-        ] = "small",
+        model_name: str = "small",
         device: Union[Literal["cpu", "cuda"], None] = None,
     ):
         self.device = device
@@ -365,9 +363,7 @@ class FasterWhisperModel(AbstractWhisperModel):
 
     def load(
         self,
-        model_name: Literal[
-            "tiny", "base", "small", "medium", "large", "large-v2"
-        ] = "small",
+        model_name: str = "small",
         device: Union[Literal["cpu", "cuda"], None] = None,
     ):
         try:
