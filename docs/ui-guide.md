@@ -114,7 +114,7 @@ Markdown 格式，用于选择保留哪些字幕片段。由转录步骤生成�
 
 <video controls="true" allowfullscreen="true"> <source src="demo.mp4" type="video/mp4"> </video>
 
-Texts generated from [demo.srt](demo.srt).Mark the sentences to keep for autocut.
+Texts generated from [demo.srt](demo.srt). Mark the sentences to keep for autocut.
 The format is [subtitle_index,duration_in_second] subtitle context.
 
 - [ ] [1,00:00]   大家好，这是一条测试视频。
