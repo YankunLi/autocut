@@ -43,10 +43,9 @@ class Transcribe:
             # Skip only if BOTH srt and md exist (both are needed downstream:
             # the Cutter reads the srt, the md marks editing progress).
             # If either is missing, re-transcribe to regenerate both.
-            if (
-                utils.check_exists(name + ".srt", self.args.force)
-                and utils.check_exists(name + ".md", self.args.force)
-            ):
+            if utils.check_exists(
+                name + ".srt", self.args.force
+            ) and utils.check_exists(name + ".md", self.args.force):
                 continue
 
             audio = utils.load_audio(input, sr=self.sampling_rate)
@@ -79,7 +78,9 @@ class Transcribe:
         )
 
         # Remove too short segments
-        speeches = utils.remove_short_segments(speeches, 1.0 * self.sampling_rate, audio.shape[0])
+        speeches = utils.remove_short_segments(
+            speeches, 1.0 * self.sampling_rate, audio.shape[0]
+        )
 
         # Expand to avoid to tight cut. You can tune the pad length
         speeches = utils.expand_segments(
@@ -102,13 +103,20 @@ class Transcribe:
         tic = time.time()
         res = (
             self.whisper_model.transcribe(
-                audio, speech_array_indices, self.args.lang, self.args.prompt,
+                audio,
+                speech_array_indices,
+                self.args.lang,
+                self.args.prompt,
                 progress_callback=progress_callback,
             )
             if self.args.whisper_mode == WhisperMode.WHISPER.value
             or self.args.whisper_mode == WhisperMode.FASTER.value
             else self.whisper_model.transcribe(
-                input, audio, speech_array_indices, self.args.lang, self.args.prompt,
+                input,
+                audio,
+                speech_array_indices,
+                self.args.lang,
+                self.args.prompt,
                 progress_callback=progress_callback,
             )
         )

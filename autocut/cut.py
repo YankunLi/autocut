@@ -3,7 +3,13 @@ import os
 import re
 
 from . import utils
-from .schema import load_project, md_to_project, project_to_segments, srt_to_project, save_project
+from .schema import (
+    load_project,
+    md_to_project,
+    project_to_segments,
+    srt_to_project,
+    save_project,
+)
 
 
 # Merge videos
@@ -68,17 +74,17 @@ class Merger:
 
         if encoding_method == "stream_copy":
             from .ffmpeg_cut import merge_videos_stream_copy
+
             merge_videos_stream_copy(videos, fn)
         else:
             from moviepy import editor
+
             clips = []
             try:
                 for v in videos:
                     clips.append(editor.VideoFileClip(v))
                 merged = editor.concatenate_videoclips(clips)
-                merged.write_videofile(
-                    fn, audio_codec="aac", bitrate=self.args.bitrate
-                )
+                merged.write_videofile(fn, audio_codec="aac", bitrate=self.args.bitrate)
             finally:
                 for c in clips:
                     c.close()
@@ -166,7 +172,10 @@ class Cutter:
 
                     final_clip = final_clip.fx(editor.afx.audio_normalize)
                     final_clip.write_audiofile(
-                        output_fn, codec="libmp3lame", fps=44100, bitrate=self.args.bitrate
+                        output_fn,
+                        codec="libmp3lame",
+                        fps=44100,
+                        bitrate=self.args.bitrate,
                     )
             finally:
                 media.close()

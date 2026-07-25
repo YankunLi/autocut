@@ -225,6 +225,7 @@ def main():
 
         app = create_ui()
         from .ui import _get_workspace
+
         workspace = _get_workspace()
         # Allow the configured workspace plus the default root so that
         # any future workspace path changes are also covered.

@@ -94,7 +94,9 @@ def _gen_dirname(source_name):
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     rand4 = "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
     # Strip characters that are invalid in directory names on Windows
-    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source_name).strip(" .") or "source"
+    safe_name = (
+        re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source_name).strip(" .") or "source"
+    )
     return f"{timestamp}_{rand4}_{safe_name}"
 
 
@@ -130,7 +132,9 @@ def create_ui():
     def transcribe_media(media_path, lang, whisper_mode, whisper_model_name, device):
         path = _resolve_media_path(media_path)
         if not path:
-            yield None, "请先上传视频/音频文件", gr.update(interactive=True), gr.update(interactive=False)
+            yield None, "请先上传视频/音频文件", gr.update(interactive=True), gr.update(
+                interactive=False
+            )
             return
 
         cancel_flag = _CancelFlag()
@@ -153,7 +157,14 @@ def create_ui():
         args.vad = "auto"
         args.device = device if device != "auto" else None
 
-        result = {"status": "running", "srt_path": None, "error": None, "step": "初始化...", "segment_done": 0, "segment_total": 0}
+        result = {
+            "status": "running",
+            "srt_path": None,
+            "error": None,
+            "step": "初始化...",
+            "segment_done": 0,
+            "segment_total": 0,
+        }
 
         def _on_transcribe_progress(done, total):
             result["segment_done"] = done
@@ -183,9 +194,16 @@ def create_ui():
                     result["status"] = "cancelled"
                     return
 
-                result["step"] = f"正在转录语音，共 {len(speech_array_indices)} 个片段（此步骤耗时较长）..."
+                result["step"] = (
+                    f"正在转录语音，共 {len(speech_array_indices)} 个片段（此步骤耗时较长）..."
+                )
                 result["segment_total"] = len(speech_array_indices)
-                transcribe_results = t._transcribe(path, audio, speech_array_indices, progress_callback=_on_transcribe_progress)
+                transcribe_results = t._transcribe(
+                    path,
+                    audio,
+                    speech_array_indices,
+                    progress_callback=_on_transcribe_progress,
+                )
 
                 if cancel_flag.cancelled:
                     result["status"] = "cancelled"
@@ -205,7 +223,9 @@ def create_ui():
                 result["srt_path"] = srt_path
             except Exception as e:
                 result["status"] = "error"
-                result["error"] = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                result["error"] = (
+                    f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                )
 
         _worker_start = time.time()
         thread = threading.Thread(target=_worker, daemon=True)
@@ -220,20 +240,36 @@ def create_ui():
             elapsed = int(time.time() - _worker_start)
             if step != last_step:
                 if result["segment_total"] > 0:
-                    yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True, visible=True)
+                    yield None, f"{step}  已用时 {elapsed} 秒", gr.update(
+                        interactive=False
+                    ), gr.update(interactive=True, visible=True)
                 else:
-                    yield None, step, gr.update(interactive=False), gr.update(interactive=True, visible=True)
+                    yield None, step, gr.update(interactive=False), gr.update(
+                        interactive=True, visible=True
+                    )
                 last_step = step
             else:
-                yield None, f"{step}  已用时 {elapsed} 秒", gr.update(interactive=False), gr.update(interactive=True, visible=True)
+                yield None, f"{step}  已用时 {elapsed} 秒", gr.update(
+                    interactive=False
+                ), gr.update(interactive=True, visible=True)
             time.sleep(2)
 
         if result["status"] == "cancelled":
-            yield None, "转录已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False)
+            yield None, "转录已取消", gr.update(interactive=True), gr.update(
+                interactive=False, visible=False
+            )
         elif result["status"] == "error":
-            yield None, f"转录失败: {result['error']}", gr.update(interactive=True), gr.update(interactive=False, visible=False)
+            yield None, f"转录失败: {result['error']}", gr.update(
+                interactive=True
+            ), gr.update(interactive=False, visible=False)
         else:
-            yield result["srt_path"], f"转录完成！已生成 {result['srt_path']}", gr.update(interactive=True), gr.update(interactive=False, visible=False)
+            yield result[
+                "srt_path"
+            ], f"转录完成！已生成 {result['srt_path']}", gr.update(
+                interactive=True
+            ), gr.update(
+                interactive=False, visible=False
+            )
 
     # --- Step 3: load & display ---
 
@@ -288,7 +324,9 @@ def create_ui():
         else:
             return None, "请提供 SRT 或 JSON 文件，或先在第二步生成字幕", -1
 
-        if not isinstance(project, dict) or not isinstance(project.get("segments"), list):
+        if not isinstance(project, dict) or not isinstance(
+            project.get("segments"), list
+        ):
             return None, "项目文件格式无效：缺少 segments 列表", -1
 
         # Build source info string
@@ -309,23 +347,25 @@ def create_ui():
 
         rows = []
         for seg in project["segments"]:
-            rows.append([
-                seg["index"],
-                round(seg["start"], 3),
-                round(seg["end"], 3),
-                seg["text"],
-                seg["keep"],
-                seg["transition"],
-                seg["transition_duration"],
-            ])
+            rows.append(
+                [
+                    seg["index"],
+                    round(seg["start"], 3),
+                    round(seg["end"], 3),
+                    seg["text"],
+                    seg["keep"],
+                    seg["transition"],
+                    seg["transition_duration"],
+                ]
+            )
         return rows, f"已加载 {len(project['segments'])} 个片段\n{source_info}", -1
 
     def _parse_segments(segments_data):
         if segments_data is None:
             return None
-        if hasattr(segments_data, 'empty') and segments_data.empty:
+        if hasattr(segments_data, "empty") and segments_data.empty:
             return None
-        if hasattr(segments_data, 'values'):
+        if hasattr(segments_data, "values"):
             rows = segments_data.values.tolist()
         elif isinstance(segments_data, list):
             rows = segments_data
@@ -344,15 +384,17 @@ def create_ui():
         result = []
         for i, row in enumerate(rows):
             try:
-                result.append({
-                    "index": int(float(row[0])),
-                    "start": float(row[1]),
-                    "end": float(row[2]),
-                    "text": str(row[3]),
-                    "keep": _to_bool(row[4]),
-                    "transition": str(row[5]),
-                    "transition_duration": float(row[6]),
-                })
+                result.append(
+                    {
+                        "index": int(float(row[0])),
+                        "start": float(row[1]),
+                        "end": float(row[2]),
+                        "text": str(row[3]),
+                        "keep": _to_bool(row[4]),
+                        "transition": str(row[5]),
+                        "transition_duration": float(row[6]),
+                    }
+                )
             except (ValueError, TypeError, IndexError, KeyError) as e:
                 logging.warning(f"Skipping malformed segment row {i}: {row!r} ({e})")
                 continue
@@ -378,7 +420,9 @@ def create_ui():
         import hashlib
         import json as json_mod
 
-        content = json_mod.dumps(project["segments"], sort_keys=True, ensure_ascii=False)
+        content = json_mod.dumps(
+            project["segments"], sort_keys=True, ensure_ascii=False
+        )
         content_hash = hashlib.md5(content.encode()).hexdigest()[:8]
         is_video_file = utils.is_video(media_path_str.lower())
         outext = "mp4" if is_video_file else "mp3"
@@ -411,7 +455,9 @@ def create_ui():
                 if existing.get("source") != media_path_str:
                     continue
                 existing_segs = existing.get("segments", [])
-                existing_content = json_mod.dumps(existing_segs, sort_keys=True, ensure_ascii=False)
+                existing_content = json_mod.dumps(
+                    existing_segs, sort_keys=True, ensure_ascii=False
+                )
                 existing_hash = hashlib.md5(existing_content.encode()).hexdigest()[:8]
                 if existing_hash != content_hash:
                     continue
@@ -458,7 +504,9 @@ def create_ui():
         os.makedirs(source_dir, exist_ok=True)
         # Write marker file
         meta = {"source": media_path_str, "created": time.strftime("%Y-%m-%d %H:%M:%S")}
-        with open(os.path.join(source_dir, ".autocut_meta.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(source_dir, ".autocut_meta.json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         # Copy SRT if it exists next to the source
         base, _ = os.path.splitext(media_path_str)
@@ -483,12 +531,16 @@ def create_ui():
         _cut_cancel["flag"] = cancel_flag
         err = _check_file(media_path, "视频/音频文件")
         if err:
-            yield err, gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+            yield err, gr.update(interactive=True), gr.update(
+                interactive=False
+            ), gr.update(visible=False)
             return
         path = _resolve_media_path(media_path)
         segments = _parse_segments(segments_data)
         if not segments:
-            yield "没有可剪辑的片段", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+            yield "没有可剪辑的片段", gr.update(interactive=True), gr.update(
+                interactive=False
+            ), gr.update(visible=False)
             return
         project: CutProject = {
             "version": "1.0",
@@ -498,14 +550,20 @@ def create_ui():
 
         cut_segs = project_to_segments(project)
         if not cut_segs:
-            yield "没有勾选保留的片段", gr.update(interactive=True), gr.update(interactive=False), gr.update(visible=False)
+            yield "没有勾选保留的片段", gr.update(interactive=True), gr.update(
+                interactive=False
+            ), gr.update(visible=False)
             return
 
         # Skip cutting if output already exists for this exact project
         existing_video, existing_json = _find_existing_cut(project, path)
         if existing_video:
-            yield (f"剪辑视频已存在，跳过重复剪辑：\n视频: {existing_video}\n项目: {existing_json}",
-                   gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=True))
+            yield (
+                f"剪辑视频已存在，跳过重复剪辑：\n视频: {existing_video}\n项目: {existing_json}",
+                gr.update(interactive=True),
+                gr.update(interactive=False, visible=False),
+                gr.update(visible=True),
+            )
             _last_output_path["value"] = existing_video
             return
 
@@ -527,21 +585,39 @@ def create_ui():
             output_fn = os.path.join(cut_dir, f"{source_name}_cut.{outext}")
             json_fn = os.path.join(cut_dir, f"{source_name}_cut.json")
 
-            for msg in _cut_with_progress(path, output_fn, cut_segs, precise, is_video_file, cancel_flag):
+            for msg in _cut_with_progress(
+                path, output_fn, cut_segs, precise, is_video_file, cancel_flag
+            ):
                 if cancel_flag.cancelled:
-                    yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
+                    yield "剪辑已取消", gr.update(interactive=True), gr.update(
+                        interactive=False, visible=False
+                    ), gr.update(visible=False)
                     return
-                yield msg, gr.update(interactive=False), gr.update(interactive=True, visible=True), gr.update(visible=False)
+                yield msg, gr.update(interactive=False), gr.update(
+                    interactive=True, visible=True
+                ), gr.update(visible=False)
             if cancel_flag.cancelled:
-                yield "剪辑已取消", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
+                yield "剪辑已取消", gr.update(interactive=True), gr.update(
+                    interactive=False, visible=False
+                ), gr.update(visible=False)
                 return
             save_project(project, json_fn)
-            yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=True)
+            yield f"剪辑完成！\n视频: {output_fn}\n项目: {json_fn}（共 {total} 个片段）", gr.update(
+                interactive=True
+            ), gr.update(
+                interactive=False, visible=False
+            ), gr.update(
+                visible=True
+            )
             _last_output_path["value"] = output_fn
         except Exception as e:
-            yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(interactive=False, visible=False), gr.update(visible=False)
+            yield f"剪辑失败: {e}", gr.update(interactive=True), gr.update(
+                interactive=False, visible=False
+            ), gr.update(visible=False)
 
-    def _cut_with_progress(input_path, output_path, segments, precise, is_video_file, cancel_flag):
+    def _cut_with_progress(
+        input_path, output_path, segments, precise, is_video_file, cancel_flag
+    ):
         from .ffmpeg_cut import _run_ffmpeg, _concat_segments, cut_segments_stream_copy
         import tempfile
 
@@ -573,22 +649,36 @@ def create_ui():
                 seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
                 if is_video_file:
                     cmd = [
-                        "ffmpeg", "-y",
-                        "-ss", str(seg["start"]),
-                        "-i", input_path,
-                        "-t", str(duration),
-                        "-c:v", "libx264", "-c:a", "aac",
-                        "-pix_fmt", "yuv420p",
-                        "-movflags", "+faststart",
+                        "ffmpeg",
+                        "-y",
+                        "-ss",
+                        str(seg["start"]),
+                        "-i",
+                        input_path,
+                        "-t",
+                        str(duration),
+                        "-c:v",
+                        "libx264",
+                        "-c:a",
+                        "aac",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-movflags",
+                        "+faststart",
                         seg_path,
                     ]
                 else:
                     cmd = [
-                        "ffmpeg", "-y",
-                        "-ss", str(seg["start"]),
-                        "-i", input_path,
-                        "-t", str(duration),
-                        "-c:a", "libmp3lame" if ext == ".mp3" else "aac",
+                        "ffmpeg",
+                        "-y",
+                        "-ss",
+                        str(seg["start"]),
+                        "-i",
+                        input_path,
+                        "-t",
+                        str(duration),
+                        "-c:a",
+                        "libmp3lame" if ext == ".mp3" else "aac",
                         seg_path,
                     ]
                 _run_ffmpeg(cmd)
@@ -603,6 +693,7 @@ def create_ui():
             if has_transitions:
                 yield "正在应用转场效果..."
                 from .ffmpeg_cut import _apply_transitions
+
                 seg_files = _apply_transitions(seg_files, kept, is_video_file, tmpdir)
 
             if cancel_flag.cancelled:
@@ -699,22 +790,26 @@ def create_ui():
                         if os.path.exists(candidate):
                             video_path = candidate
                             break
-                    cuts.append({
-                        "video": video_path or "",
-                        "json": json_path,
-                        "cut_dir": cut_dir,
-                        "cut_dirname": sub_name,
-                    })
+                    cuts.append(
+                        {
+                            "video": video_path or "",
+                            "json": json_path,
+                            "cut_dir": cut_dir,
+                            "cut_dirname": sub_name,
+                        }
+                    )
                     break  # one json per cut dir
 
-            history.append({
-                "source": source,
-                "source_name": source_name,
-                "source_dir": source_dir,
-                "source_dirname": dirname,
-                "created": created,
-                "cuts": cuts,
-            })
+            history.append(
+                {
+                    "source": source,
+                    "source_name": source_name,
+                    "source_dir": source_dir,
+                    "source_dirname": dirname,
+                    "created": created,
+                    "cuts": cuts,
+                }
+            )
 
         return history
 
@@ -739,7 +834,9 @@ def create_ui():
             )
             idx += 1
             for cut in rec["cuts"]:
-                video_name = html.escape(os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)")
+                video_name = html.escape(
+                    os.path.basename(cut["video"]) if cut["video"] else "(视频已删除)"
+                )
                 cut_dirname = html.escape(cut["cut_dirname"])
                 html_parts.append(
                     "<div style='margin:6px 0 6px 12px; display:flex; justify-content:space-between; align-items:center;'>"
@@ -825,18 +922,33 @@ def create_ui():
                         gr.Markdown("上传需要剪辑的视频或音频文件。")
                         media_input = gr.File(
                             label="视频/音频文件",
-                            file_types=[".mp4", ".mov", ".mkv", ".avi", ".flv", ".webm", ".mp3", ".wav", ".m4a", ".flac"],
+                            file_types=[
+                                ".mp4",
+                                ".mov",
+                                ".mkv",
+                                ".avi",
+                                ".flv",
+                                ".webm",
+                                ".mp3",
+                                ".wav",
+                                ".m4a",
+                                ".flac",
+                            ],
                         )
                         media_info = gr.Textbox(label="文件信息", interactive=False)
                         media_input.change(
-                            fn=lambda f: f"已选择: {os.path.basename(f.name)}" if f else "",
+                            fn=lambda f: (
+                                f"已选择: {os.path.basename(f.name)}" if f else ""
+                            ),
                             inputs=[media_input],
                             outputs=[media_info],
                         )
 
                     with gr.Tab("2. 生成字幕"):
                         with gr.Column():
-                            gr.Markdown("### 自动转录\n使用 Whisper 模型从视频中生成 SRT 字幕文件。")
+                            gr.Markdown(
+                                "### 自动转录\n使用 Whisper 模型从视频中生成 SRT 字幕文件。"
+                            )
                             with gr.Row():
                                 lang_input = gr.Dropdown(
                                     choices=["zh", "en", "ja", "ko", "de", "fr", "es"],
@@ -859,25 +971,55 @@ def create_ui():
                                     label="设备",
                                 )
                             with gr.Row():
-                                transcribe_btn = gr.Button("开始转录", variant="primary")
-                                cancel_transcribe_btn = gr.Button("取消转录", variant="stop", visible=False)
-                            transcribe_status = gr.Textbox(label="进度", interactive=False)
-                            transcribe_output = gr.File(label="生成的 SRT 文件", interactive=False)
+                                transcribe_btn = gr.Button(
+                                    "开始转录", variant="primary"
+                                )
+                                cancel_transcribe_btn = gr.Button(
+                                    "取消转录", variant="stop", visible=False
+                                )
+                            transcribe_status = gr.Textbox(
+                                label="进度", interactive=False
+                            )
+                            transcribe_output = gr.File(
+                                label="生成的 SRT 文件", interactive=False
+                            )
 
                         gr.Markdown("---")
                         with gr.Column():
-                            gr.Markdown("### 导入已有字幕\n如果已有 SRT/MD/JSON 文件，可直接上传。")
+                            gr.Markdown(
+                                "### 导入已有字幕\n如果已有 SRT/MD/JSON 文件，可直接上传。"
+                            )
                             with gr.Row():
-                                srt_input = gr.File(label="SRT 文件", file_types=[".srt"])
+                                srt_input = gr.File(
+                                    label="SRT 文件", file_types=[".srt"]
+                                )
                                 md_input = gr.File(label="MD 文件", file_types=[".md"])
-                                json_input = gr.File(label="JSON 项目文件", file_types=[".json"])
+                                json_input = gr.File(
+                                    label="JSON 项目文件", file_types=[".json"]
+                                )
 
                     with gr.Tab("3. 编辑片段"):
                         gr.Markdown("加载字幕后，勾选要保留的片段，设置转场效果。")
                         load_btn = gr.Button("加载片段", variant="primary")
                         segments_df = gr.Dataframe(
-                            headers=["Index", "Start", "End", "Text", "Keep", "Transition", "Trans. Duration"],
-                            datatype=["number", "number", "number", "str", "bool", "str", "number"],
+                            headers=[
+                                "Index",
+                                "Start",
+                                "End",
+                                "Text",
+                                "Keep",
+                                "Transition",
+                                "Trans. Duration",
+                            ],
+                            datatype=[
+                                "number",
+                                "number",
+                                "number",
+                                "str",
+                                "bool",
+                                "str",
+                                "number",
+                            ],
                             interactive=True,
                             label="片段列表",
                         )
@@ -892,7 +1034,9 @@ def create_ui():
                             )
                             apply_transition_btn = gr.Button("应用到选中行", scale=1)
                             apply_all_transition_btn = gr.Button("应用到所有", scale=1)
-                        transition_status = gr.Textbox(label="转场操作结果", interactive=False)
+                        transition_status = gr.Textbox(
+                            label="转场操作结果", interactive=False
+                        )
 
                         with gr.Accordion("转场类型说明", open=False):
                             gr.Markdown(
@@ -906,10 +1050,14 @@ def create_ui():
                     with gr.Tab("4. 剪辑视频"):
                         gr.Markdown("编辑完成后，点击剪辑按钮生成结果。")
                         with gr.Row():
-                            precise_chk = gr.Checkbox(label="帧精确剪切（推荐）", value=True)
+                            precise_chk = gr.Checkbox(
+                                label="帧精确剪切（推荐）", value=True
+                            )
                         with gr.Row():
                             cut_btn = gr.Button("开始剪辑", variant="primary")
-                            cancel_cut_btn = gr.Button("取消剪辑", variant="stop", visible=False)
+                            cancel_cut_btn = gr.Button(
+                                "取消剪辑", variant="stop", visible=False
+                            )
                             save_btn = gr.Button("保存项目 JSON")
                             open_dir_btn = gr.Button("打开输出目录", visible=False)
                         cut_status = gr.Textbox(label="进度", interactive=False)
@@ -918,7 +1066,9 @@ def create_ui():
                 with gr.Column(visible=False) as history_panel:
                     gr.Markdown("## 历史记录")
                     with gr.Row():
-                        refresh_history_btn = gr.Button("刷新", variant="secondary", size="sm")
+                        refresh_history_btn = gr.Button(
+                            "刷新", variant="secondary", size="sm"
+                        )
                     history_html = gr.HTML(
                         value=_refresh_history(),
                         elem_classes="history-html",
@@ -956,27 +1106,81 @@ def create_ui():
 
         # --- Navigation ---
         def show_cut():
-            return (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False),
-                    gr.update(variant="primary"), gr.update(variant="secondary"), gr.update(variant="secondary"))
+            return (
+                gr.update(visible=True),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(variant="primary"),
+                gr.update(variant="secondary"),
+                gr.update(variant="secondary"),
+            )
 
         def show_history():
-            return (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
-                    gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"))
+            return (
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=False),
+                gr.update(variant="secondary"),
+                gr.update(variant="primary"),
+                gr.update(variant="secondary"),
+            )
 
         def show_config():
-            return (gr.update(visible=False), gr.update(visible=False), gr.update(visible=True),
-                    gr.update(variant="secondary"), gr.update(variant="secondary"), gr.update(variant="primary"))
+            return (
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(variant="secondary"),
+                gr.update(variant="secondary"),
+                gr.update(variant="primary"),
+            )
 
-        nav_cut_btn.click(fn=show_cut, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
-        nav_config_btn.click(fn=show_config, inputs=[], outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn])
+        nav_cut_btn.click(
+            fn=show_cut,
+            inputs=[],
+            outputs=[
+                cut_panel,
+                history_panel,
+                config_panel,
+                nav_cut_btn,
+                nav_history_btn,
+                nav_config_btn,
+            ],
+        )
+        nav_config_btn.click(
+            fn=show_config,
+            inputs=[],
+            outputs=[
+                cut_panel,
+                history_panel,
+                config_panel,
+                nav_cut_btn,
+                nav_history_btn,
+                nav_config_btn,
+            ],
+        )
 
         # History panel: also refresh when switching to it
         nav_history_btn.click(
-            fn=lambda: (gr.update(visible=False), gr.update(visible=True), gr.update(visible=False),
-                        gr.update(variant="secondary"), gr.update(variant="primary"), gr.update(variant="secondary"),
-                        _refresh_history()),
+            fn=lambda: (
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=False),
+                gr.update(variant="secondary"),
+                gr.update(variant="primary"),
+                gr.update(variant="secondary"),
+                _refresh_history(),
+            ),
             inputs=[],
-            outputs=[cut_panel, history_panel, config_panel, nav_cut_btn, nav_history_btn, nav_config_btn, history_html],
+            outputs=[
+                cut_panel,
+                history_panel,
+                config_panel,
+                nav_cut_btn,
+                nav_history_btn,
+                nav_config_btn,
+                history_html,
+            ],
         )
 
         # --- Wire up events ---
@@ -996,14 +1200,27 @@ def create_ui():
             return _open_directory(path)
 
         # History events
-        refresh_history_btn.click(fn=lambda: _refresh_history(), inputs=[], outputs=[history_html])
+        refresh_history_btn.click(
+            fn=lambda: _refresh_history(), inputs=[], outputs=[history_html]
+        )
 
         # Remove unused hidden endpoints - the HTML component's server_functions handle it now
 
         transcribe_btn.click(
             fn=transcribe_media,
-            inputs=[media_input, lang_input, whisper_mode_input, whisper_model_input, device_input],
-            outputs=[transcribe_output, transcribe_status, transcribe_btn, cancel_transcribe_btn],
+            inputs=[
+                media_input,
+                lang_input,
+                whisper_mode_input,
+                whisper_model_input,
+                device_input,
+            ],
+            outputs=[
+                transcribe_output,
+                transcribe_status,
+                transcribe_btn,
+                cancel_transcribe_btn,
+            ],
         )
 
         cancel_transcribe_btn.click(
@@ -1122,7 +1339,11 @@ def create_ui():
                 return f"无法创建工作目录: {e}"
             return _open_directory(ws)
 
-        save_workspace_btn.click(fn=save_workspace, inputs=[workspace_tb], outputs=[workspace_status])
-        open_workspace_btn.click(fn=open_workspace, inputs=[], outputs=[workspace_status])
+        save_workspace_btn.click(
+            fn=save_workspace, inputs=[workspace_tb], outputs=[workspace_status]
+        )
+        open_workspace_btn.click(
+            fn=open_workspace, inputs=[], outputs=[workspace_status]
+        )
 
     return app

@@ -9,7 +9,9 @@ def _run_ffmpeg(cmd: list[str]) -> str:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError:
-        raise RuntimeError(f"ffmpeg not found. Please install ffmpeg and add it to PATH.")
+        raise RuntimeError(
+            f"ffmpeg not found. Please install ffmpeg and add it to PATH."
+        )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed (code {result.returncode}): {result.stderr}")
     return result.stdout
@@ -25,11 +27,17 @@ def _get_keyframes(input_path: str) -> list[float]:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "frame=pts_time",
-                "-of", "csv=p=0",
-                "-skip_frame", "nokey",
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "frame=pts_time",
+                "-of",
+                "csv=p=0",
+                "-skip_frame",
+                "nokey",
                 input_path,
             ],
             capture_output=True,
@@ -149,7 +157,9 @@ def cut_segments_stream_copy(
         for i, seg in enumerate(segments):
             duration = seg["end"] - seg["start"]
             if duration <= 0:
-                logging.warning(f"Skipping segment {i}: non-positive duration {duration}")
+                logging.warning(
+                    f"Skipping segment {i}: non-positive duration {duration}"
+                )
                 continue
 
             if keyframes:
@@ -162,12 +172,18 @@ def cut_segments_stream_copy(
 
             seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
             cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(seek_start),
-                "-i", input_path,
-                "-t", str(seek_duration),
-                "-c", "copy",
-                "-avoid_negative_ts", "make_zero",
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(seek_start),
+                "-i",
+                input_path,
+                "-t",
+                str(seek_duration),
+                "-c",
+                "copy",
+                "-avoid_negative_ts",
+                "make_zero",
                 seg_path,
             ]
             _run_ffmpeg(cmd)
@@ -195,23 +211,36 @@ def _cut_segments_precise(
             seg_path = os.path.join(tmpdir, f"seg_{i:04d}{ext}")
             if is_video:
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", str(seg["start"]),
-                    "-i", input_path,
-                    "-t", str(duration),
-                    "-c:v", "libx264",
-                    "-c:a", "aac",
-                    "-pix_fmt", "yuv420p",
-                    "-movflags", "+faststart",
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(seg["start"]),
+                    "-i",
+                    input_path,
+                    "-t",
+                    str(duration),
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
                     seg_path,
                 ]
             else:
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", str(seg["start"]),
-                    "-i", input_path,
-                    "-t", str(duration),
-                    "-c:a", "libmp3lame" if ext == ".mp3" else "aac",
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(seg["start"]),
+                    "-i",
+                    input_path,
+                    "-t",
+                    str(duration),
+                    "-c:a",
+                    "libmp3lame" if ext == ".mp3" else "aac",
                     seg_path,
                 ]
             _run_ffmpeg(cmd)
@@ -240,11 +269,16 @@ def _concat_segments(seg_files: list[str], output_path: str) -> str:
                 f.write(f"file '{_to_concat_path(sf)}'\n")
 
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list,
-            "-c", "copy",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_list,
+            "-c",
+            "copy",
             output_path,
         ]
         _run_ffmpeg(cmd)
@@ -267,11 +301,16 @@ def merge_videos_stream_copy(
                 f.write(f"file '{_to_concat_path(vp)}'\n")
 
         cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list,
-            "-c", "copy",
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_list,
+            "-c",
+            "copy",
             output_path,
         ]
         _run_ffmpeg(cmd)

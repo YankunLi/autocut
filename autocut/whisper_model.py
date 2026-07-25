@@ -99,7 +99,11 @@ class WhisperModel(AbstractWhisperModel):
                         ),
                         callback=lambda x: (
                             pbar.update(),
-                            progress_callback(next(completed), total) if progress_callback else None,
+                            (
+                                progress_callback(next(completed), total)
+                                if progress_callback
+                                else None
+                            ),
                         ),
                     )
                 )
@@ -109,9 +113,7 @@ class WhisperModel(AbstractWhisperModel):
             res = [i.get() for i in sub_res]
         else:
             for i, seg in enumerate(
-                speech_array_indices
-                if total == 1
-                else tqdm(speech_array_indices)
+                speech_array_indices if total == 1 else tqdm(speech_array_indices)
             ):
                 r = self.whisper_model.transcribe(
                     audio[int(seg["start"]) : int(seg["end"])],
@@ -263,7 +265,11 @@ class OpenAIModel(AbstractWhisperModel):
                         ),
                         callback=lambda x: (
                             pbar.update(),
-                            progress_callback(next(completed), total) if progress_callback else None,
+                            (
+                                progress_callback(next(completed), total)
+                                if progress_callback
+                                else None
+                            ),
                         ),
                     )
                 )
@@ -299,7 +305,9 @@ class OpenAIModel(AbstractWhisperModel):
                 map(
                     lambda x: (
                         setattr(
-                            x, "start", x.start + datetime.timedelta(milliseconds=start_ms)
+                            x,
+                            "start",
+                            x.start + datetime.timedelta(milliseconds=start_ms),
                         ),
                         setattr(
                             x, "end", x.end + datetime.timedelta(milliseconds=start_ms)

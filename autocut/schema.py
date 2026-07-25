@@ -94,10 +94,15 @@ def project_to_segments(
 
     result = []
     for group in groups:
-        raw = [{"start": s["start"], "end": s["end"],
+        raw = [
+            {
+                "start": s["start"],
+                "end": s["end"],
                 "transition": s.get("transition", "cut"),
-                "transition_duration": s.get("transition_duration", 0.0)}
-               for s in group]
+                "transition_duration": s.get("transition_duration", 0.0),
+            }
+            for s in group
+        ]
         merged = utils.merge_adjacent_segments(raw, merge_gap)
         result.extend(merged)
     return result
