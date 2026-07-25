@@ -108,7 +108,6 @@ def create_ui():
             "Gradio is required for the web UI. Install it with: pip install autocut-sub[ui]"
         )
 
-    from .ffmpeg_cut import cut_segments_stream_copy
     from . import utils
     from .type import WhisperMode, WhisperModel
 
