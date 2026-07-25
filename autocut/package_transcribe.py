@@ -3,7 +3,6 @@ import time
 from typing import List, Any, Union, Literal
 
 import numpy as np
-import torch
 
 from . import utils, whisper_model
 from .type import WhisperMode, SPEECH_ARRAY_INDEX, LANG
@@ -61,13 +60,7 @@ class Transcribe:
 
         tic = time.time()
         if self.vad_model is None or self.detect_speech is None:
-            # torch load limit https://github.com/pytorch/vision/issues/4156
-            torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
-            self.vad_model, funcs = torch.hub.load(
-                repo_or_dir="snakers4/silero-vad", model="silero_vad", trust_repo=True
-            )
-
-            self.detect_speech = funcs[0]
+            self.vad_model, self.detect_speech = utils.load_silero_vad()
 
         speeches = self.detect_speech(
             audio, self.vad_model, sampling_rate=self.sampling_rate

@@ -8,6 +8,40 @@ import opencc
 import srt
 
 
+def load_silero_vad():
+    """Load the Silero VAD model and return (model, detect_speech_fn).
+
+    Prefers the local torch.hub cache so we don't hit GitHub on every
+    call once the model has been downloaded. torch.hub.load with the
+    default github source re-checks the network even when the repo is
+    cached, which causes intermittent RemoteDisconnected failures when
+    GitHub rate-limits.
+    """
+    import torch
+
+    # Bypass the forked-repo prompt that would otherwise block non-interactive
+    # runs. Older torch versions call this during load; setting it is harmless
+    # on newer versions.
+    torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+
+    cache_dir = torch.hub.get_dir()
+    local_repo = os.path.join(cache_dir, "snakers4_silero-vad_master")
+    if os.path.isdir(local_repo):
+        vad_model, funcs = torch.hub.load(
+            source="local",
+            repo_or_dir=local_repo,
+            model="silero_vad",
+            trust_repo=True,
+        )
+    else:
+        vad_model, funcs = torch.hub.load(
+            repo_or_dir="snakers4/silero-vad",
+            model="silero_vad",
+            trust_repo=True,
+        )
+    return vad_model, funcs[0]
+
+
 def load_audio(file: str, sr: int = 16000) -> np.ndarray:
     try:
         out, _ = (
