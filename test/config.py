@@ -56,7 +56,7 @@ class TestArgs:
         self.prompt = ""
         self.whisper_model = "small"
         self.device = None
-        self.vad = False
+        self.vad = "0"
         self.force = False
         self.whisper_mode = (
             "faster" if os.environ.get("WHISPER_MODE") == "faster" else "whisper"

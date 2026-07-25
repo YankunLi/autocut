@@ -127,7 +127,7 @@ class TestTranscribe(unittest.TestCase):
         logging.info("检查--vad参数生成字幕")
         args = TestArgs()
         args.force = True
-        args.vad = True
+        args.vad = "1"
         args.inputs = [TEST_MEDIA_PATH + file_name]
         transcribe = Transcribe(args)
         transcribe.run()
