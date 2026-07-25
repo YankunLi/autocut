@@ -173,7 +173,7 @@ def expand_segments(segments, expand_head, expand_tail, total_length):
     return results
 
 
-def remove_short_segments(segments, threshold, total_length):
+def remove_short_segments(segments, threshold):
     # Remove segments whose length < threshold, but always keep segments at the
     # very start of audio to avoid losing opening words.
     if not segments:
