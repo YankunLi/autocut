@@ -10,7 +10,7 @@ def _run_ffmpeg(cmd: list[str]) -> str:
         result = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError:
         raise RuntimeError(
-            f"ffmpeg not found. Please install ffmpeg and add it to PATH."
+            "ffmpeg not found. Please install ffmpeg and add it to PATH."
         )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed (code {result.returncode}): {result.stderr}")
