@@ -253,28 +253,6 @@ def _concat_segments(seg_files: list[str], output_path: str) -> str:
     return output_path
 
 
-def _concat_segments_reencode(seg_files: list[str], output_path: str) -> str:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        concat_list = os.path.join(tmpdir, "concat.txt")
-        with open(concat_list, "w", encoding="utf-8") as f:
-            for sf in seg_files:
-                f.write(f"file '{_to_concat_path(sf)}'\n")
-
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list,
-            "-c:v", "libx264",
-            "-c:a", "aac",
-            output_path,
-        ]
-        _run_ffmpeg(cmd)
-
-    logging.info(f"Precise cut saved to {output_path}")
-    return output_path
-
-
 def merge_videos_stream_copy(
     video_paths: list[str],
     output_path: str,
