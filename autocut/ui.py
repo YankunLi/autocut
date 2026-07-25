@@ -37,10 +37,6 @@ class _CancelFlag:
         with self._lock:
             return self._cancelled
 
-    def reset(self):
-        with self._lock:
-            self._cancelled = False
-
 
 # Global cancel flags — one per operation type.
 # Each is a holder dict so transcribe_media/run_cut can swap in a fresh
