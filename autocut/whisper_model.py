@@ -232,9 +232,9 @@ class OpenAIModel(AbstractWhisperModel):
                 )
             else:
                 logging.info(
-                    f"Long audio with a size({len(audio_seg.raw_data)} bytes) greater than 25M({25 * 2 ** 20} bytes) "
-                    "will be segmented "
-                    "due to Openai's API restrictions on files smaller than 25M"
+                    f"Long audio segment ({len(audio_seg.raw_data)} bytes) exceeds the "
+                    f"{self.split_audio_bytes}-byte split threshold (set 2MB below the "
+                    f"{self.max_single_audio_bytes}-byte OpenAI API limit); segmenting it."
                 )
                 split_num = len(audio_seg.raw_data) // self.split_audio_bytes + 1
                 for j in range(split_num):
