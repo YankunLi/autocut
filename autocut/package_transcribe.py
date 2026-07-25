@@ -6,16 +6,14 @@ import numpy as np
 import torch
 
 from . import utils, whisper_model
-from .type import WhisperMode, SPEECH_ARRAY_INDEX, WhisperModel, LANG
+from .type import WhisperMode, SPEECH_ARRAY_INDEX, LANG
 
 
 class Transcribe:
     def __init__(
         self,
-        whisper_mode: Union[
-            WhisperMode.WHISPER.value, WhisperMode.FASTER.value
-        ] = WhisperMode.WHISPER.value,
-        whisper_model_size: WhisperModel.get_values() = "small",
+        whisper_mode: Literal["whisper", "faster"] = WhisperMode.WHISPER.value,
+        whisper_model_size: str = "small",
         vad: bool = True,
         device: Union[Literal["cpu", "cuda"], None] = None,
     ):
