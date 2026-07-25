@@ -184,9 +184,24 @@ class OpenAIModel(AbstractWhisperModel):
             raise Exception(
                 "Please use openai mode(pip install '.[openai]') or all mode(pip install '.[all]')"
             )
-        from functools import partial
 
-        self.whisper_model = partial(openai.Audio.transcribe, model=model_name)
+        # openai>=1.0 removed the module-level openai.Audio.transcribe helper.
+        # Build a client and wrap the new client.audio.transcriptions.create
+        # so _transcribe can keep calling self.whisper_model(file=..., ...).
+        api_key = os.environ.get("OPENAI_API_KEY")
+        key_path = os.environ.get("OPENAI_API_KEY_PATH")
+        if not api_key and key_path:
+            with open(key_path) as f:
+                api_key = f.read().strip()
+
+        client = openai.OpenAI(api_key=api_key)
+        self.whisper_model = lambda file, prompt, language, response_format: client.audio.transcriptions.create(
+            model=model_name,
+            file=file,
+            prompt=prompt,
+            language=language,
+            response_format=response_format,
+        )
 
     def transcribe(
         self,
