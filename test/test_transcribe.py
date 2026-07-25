@@ -88,13 +88,6 @@ class TestTranscribe(unittest.TestCase):
         args = TestArgs()
         args.force = True
         args.inputs = [TEST_MEDIA_PATH + file_name]
-        md0_lens = len(
-            "".join(
-                MD(
-                    TEST_MEDIA_PATH + file_name.split(".")[0] + ".md", args.encoding
-                ).lines
-            )
-        )
         transcribe = Transcribe(args)
         transcribe.run()
         md1_lens = len(
