@@ -152,9 +152,7 @@ def check_exists(output, force):
         if force:
             logging.info(f"{output} exists. Will overwrite it")
         else:
-            logging.info(
-                f"{output} exists, skipping... Use the --force flag to overwrite"
-            )
+            logging.info(f"{output} exists. Use --force to overwrite")
             return True
     return False
 
