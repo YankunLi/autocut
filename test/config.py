@@ -43,6 +43,10 @@ TEST_MEDIA_FILE_SIMPLE = ["test001.mp4", "test005.mp3"]
 
 
 class TestArgs:
+    # Tell pytest not to collect this class as a test suite (the name
+    # starts with "Test" but it's a fixture holding CLI-style args).
+    __test__ = False
+
     def __init__(self):
         self.inputs = []
         self.bitrate = "10m"
