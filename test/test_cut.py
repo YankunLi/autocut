@@ -31,6 +31,8 @@ class TestCut(unittest.TestCase):
                 os.remove(namepart + "mp4")
             if os.path.exists(namepart + "mp3"):
                 os.remove(namepart + "mp3")
+            if os.path.exists(namepart + "json"):
+                os.remove(namepart + "json")
 
     @parameterized.expand([param(file) for file in TEST_MEDIA_FILE_SIMPLE])
     def test_srt_cut(self, file_name):
