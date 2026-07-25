@@ -98,7 +98,9 @@ class MD:
     def load_file(self):
         if os.path.exists(self.filename):
             with open(self.filename, encoding=self.encoding) as f:
-                self.lines = f.readlines()
+                # Strip trailing newlines so write() can join with "\n"
+                # without producing doubled blank lines on roundtrip.
+                self.lines = [line.rstrip("\r\n") for line in f]
 
     def clear(self):
         self.lines = []
