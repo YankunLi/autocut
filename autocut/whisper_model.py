@@ -188,7 +188,7 @@ class OpenAIModel(AbstractWhisperModel):
 
     def transcribe(
         self,
-        input: srt,
+        input: str,
         audio: np.ndarray,
         speech_array_indices: List[SPEECH_ARRAY_INDEX],
         lang: LANG,
@@ -287,7 +287,7 @@ class OpenAIModel(AbstractWhisperModel):
         return res
 
     def _transcribe(
-        self, input: srt, audio: AudioSegment, prompt: str, lang: LANG, start_ms: float
+        self, input: str, audio: AudioSegment, prompt: str, lang: LANG, start_ms: float
     ):
         try:
             audio.export(input, "wav")
