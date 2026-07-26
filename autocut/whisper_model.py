@@ -341,20 +341,21 @@ class OpenAIModel(AbstractWhisperModel):
     def gen_srt(self, transcribe_results: List[srt.Subtitle]):
         if len(transcribe_results) == 0:
             return []
-        if len(transcribe_results) == 1:
-            return transcribe_results
-        subs = [transcribe_results[0]]
-        for subtitle in transcribe_results[1:]:
-            if subtitle.start - subs[-1].end > datetime.timedelta(seconds=1):
+        subs = []
+        prev_end = datetime.timedelta(0)
+        for subtitle in transcribe_results:
+            # mark any empty segment that is not very short
+            if subtitle.start - prev_end > datetime.timedelta(seconds=1):
                 subs.append(
                     srt.Subtitle(
                         index=0,
-                        start=subs[-1].end,
+                        start=prev_end,
                         end=subtitle.start,
                         content="< No Speech >",
                     )
                 )
             subs.append(subtitle)
+            prev_end = subtitle.end
         return subs
 
 
