@@ -277,7 +277,7 @@ def trans_srt_to_md(encoding, force, srt_fn, video_fn=None):
     )
 
     for s in subs:
-        sec = s.start.seconds
+        sec = int(s.start.total_seconds())
         pre = f"[{s.index},{sec // 60:02d}:{sec % 60:02d}]"
         md.add_task(False, f"{pre:11} {s.content.strip()}")
     md.write()
