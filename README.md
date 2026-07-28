@@ -28,7 +28,7 @@ autocut --ui
 
 ```shell
 autocut -t xxx --whisper-model large-v3-turbo
-````
+```
 
 **2024.03.10更新**：支持 pip 安装和提供 import 转录相关的功能
 
@@ -88,13 +88,13 @@ autocut -d 2022-11-04
 
 > 提示：如果你使用 OBS 录屏，可以在 `设置->高级->录像->文件名格式` 中将空格改成 `/`，即 `%CCYY-%MM-%DD/%hh-%mm-%ss`。那么视频文件将放在日期命名的文件夹里。
 
-AutoCut 将持续对这个文件夹里视频进行字幕抽取和剪切。例如，你刚完成一个视频录制，保存在 `11-28-18.mp4`。AutoCut 将生成 `11-28-18.md`。你在里面选择需要保留的句子后，AutoCut 将剪切出 `11-28-18_cut.mp4`，并生成 `11-28-18_cut.md` 来预览结果。
+AutoCut 将持续对这个文件夹里视频进行字幕抽取和剪切。例如，你刚完成一个视频录制，保存在 `11-28-18.mp4`。AutoCut 将生成 `11-28-18.md`。你在里面选择需要保留的句子后，AutoCut 将剪切出 `11-28-18_cut.mp4`，并生成 `11-28-18_cut.json` 来记录剪切项目。
 
 你可以使用任何的 Markdown 编辑器。例如我常用 VS Code 和 Typora。下图是通过 Typora 来对 `11-28-18.md` 编辑。
 
 ![](imgs/typora.jpg)
 
-全部完成后在 `autocut.md` 里选择需要拼接的视频后，AutoCut 将输出 `autocut_merged.mp4` 和对应的字幕文件。
+全部完成后在 `autocut.md` 里选择需要拼接的视频后，AutoCut 将输出 `autocut_merged.mp4`。
 
 ## 安装
 
@@ -114,7 +114,7 @@ pip install .
 ```
 
 
-> 上面将安装 [pytorch](https://pytorch.org/)。如果你需要 GPU 运行，且默认安装的版本不匹配的话，你可以先安装 Pytorch。如果安装 Whipser 出现问题，请参考[官方文档](https://github.com/openai/whisper#setup)。
+> 上面将安装 [pytorch](https://pytorch.org/)。如果你需要 GPU 运行，且默认安装的版本不匹配的话，你可以先安装 Pytorch。如果安装 Whisper 出现问题，请参考[官方文档](https://github.com/openai/whisper#setup)。
 
 另外需要安装 [ffmpeg](https://ffmpeg.org/)
 
@@ -286,16 +286,17 @@ autocut
 │  setup.py
 │
 └─autocut # 核心代码位于 autocut 文件夹中，新增功能的实现也一般在这里面进行修改或新增
-   │  cut.py         # 视频剪切和合并，支持 stream copy 和 reencode 两种模式
-   │  ffmpeg_cut.py  # ffmpeg stream copy 引擎，无损快速剪切
-   │  schema.py      # JSON 中间格式定义和转换函数
-   │  ui.py          # Gradio Web UI，可视化编辑片段
-   │  daemon.py      # 监听文件夹，自动生成字幕和剪切视频
-   │  main.py        # 命令行参数声明和功能调度
-   │  transcribe.py  # 调用模型生成 srt 和 md
-   │  whisper_model.py # Whisper 模型抽象层（本地/faster-whisper/OpenAI API）
-   │  utils.py       # 全局共用工具方法
-   │  type.py        # 类型定义
+   │  cut.py               # 视频剪切和合并，支持 stream copy 和 reencode 两种模式
+   │  ffmpeg_cut.py        # ffmpeg stream copy 引擎，无损快速剪切
+   │  schema.py            # JSON 中间格式定义和转换函数
+   │  ui.py                # Gradio Web UI，可视化编辑片段
+   │  daemon.py            # 监听文件夹，自动生成字幕和剪切视频
+   │  main.py              # 命令行参数声明和功能调度
+   │  transcribe.py        # CLI 转录入口，调用模型生成 srt 和 md
+   │  package_transcribe.py # 库 API 转录入口，接收显式参数供编程调用
+   │  whisper_model.py     # Whisper 模型抽象层（本地/faster-whisper/OpenAI API）
+   │  utils.py             # 全局共用工具方法
+   │  type.py              # 类型定义
    └─ __init__.py
 
 ```
@@ -315,7 +316,7 @@ autocut
 
 1. 代码风格目前遵循 PEP-8，可以使用相关的自动格式化软件完成。
 2. `utils.py` 主要是全局共用的一些工具方法。
-3. `transcribe.py` 是调用模型生成`srt`和`md`的部分。
+3. `transcribe.py` 是 CLI 转录入口，根据 argparse 参数调用模型生成`srt`和`md`；`package_transcribe.py` 是库 API 入口，接收显式参数供编程调用（`from autocut import Transcribe` 导出的是后者）。
 4. `whisper_model.py` 是 Whisper 模型抽象层，支持本地 whisper、faster-whisper 和 OpenAI API 三种模式。
 5. `cut.py` 提供根据标记后`md`或`srt`或`json`进行视频剪切合并的功能。默认使用 ffmpeg stream copy（无损快速），`--normalize` 时回退到 moviepy 重编码。
 6. `ffmpeg_cut.py` 是 ffmpeg stream copy 引擎，负责无损剪切和合并。
@@ -323,6 +324,7 @@ autocut
 8. `ui.py` 提供 Gradio Web UI，可视化编辑片段、执行剪切。
 9. `daemon.py` 提供的是监听文件夹生成字幕和剪切视频的功能。
 10. `main.py` 声明命令行参数，根据输入参数调用对应功能。
+11. `type.py` 定义 `LANG`、`WhisperModel`、`WhisperMode` 等共享类型。
 
 开发过程中请尽量保证修改在正确的地方，以及合理地复用代码，
 同时工具函数请尽可能放在`utils.py`中。
